@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <PropertyGroup>
+    <AvaloniaPlatform>$([MSBuild]::GetTargetPlatformIdentifier($(TargetFramework)))</AvaloniaPlatform>
+    <!-- Normalize casing -->
+    <AvaloniaPlatform Condition="'$(AvaloniaPlatform)' == ''">Desktop</AvaloniaPlatform>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="MicroUtilsWrapper.fs" />
+    <Compile Include="UnityData.fs" />
+    <Compile Include="App.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Properties\**" />
+  </ItemGroup>
+  <ItemGroup Condition="$(AvaloniaPlatform) == 'Desktop'">
+    <Compile Include="$(DesktopPlatformFolder)Program.fs" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.0.7" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.7" />
+    <PackageReference Include="FSharp.Core" Version="8.0.100" />
+    <PackageReference Include="Fabulous" Version="2.4.0" />
+    <PackageReference Include="Fabulous.Avalonia" Version="2.3.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MU\MicroUtils.UnityFilesystem\MicroUtils.UnityFilesystem\MicroUtils.UnityFilesystem.csproj" />
+    <ProjectReference Include="..\MU\MicroUtils\MicroUtils.csproj" />
+  </ItemGroup>
+</Project>
