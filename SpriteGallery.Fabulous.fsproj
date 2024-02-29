@@ -13,6 +13,9 @@
   <ItemGroup>
     <Compile Include="MicroUtilsWrapper.fs" />
     <Compile Include="UnityData.fs" />
+    <Compile Include="BaseModel.fs" />
+    <Compile Include="SpriteList.fs" />
+    <Compile Include="SpriteGrid.fs" />
     <Compile Include="App.fs" />
   </ItemGroup>
   <ItemGroup>
