@@ -15,6 +15,8 @@ let view (model : Model) =
     let tileSize = 64
     let columns = 16
 
+    let arBias = 0.25
+
     let cells =
         seq {
             let mutable ci = 0
@@ -24,8 +26,11 @@ let view (model : Model) =
                 let aspectRatio = (rect.Width |> float) / (rect.Height |> float)
                 let cellSpan =
                     if rect.Width > tileSize then
-                        ceil aspectRatio |> int
+                        ceil (aspectRatio - arBias) |> int
                     else 1
+
+                if cellSpan > 1 then
+                    printfn "%s: ratio %f (%i x %i) = %i cells" n aspectRatio rect.Width rect.Height cellSpan
 
                 if ci + cellSpan >= columns then
                     ci <- 0
@@ -59,6 +64,7 @@ let view (model : Model) =
                         .gridColumnSpan(cellSpan)
                         .gridColumn(column)
                         .gridRow(row)
+                        .background(SolidColorBrush(Colors.DimGray))
 
                 if i = 10 then
                     imageWithBorder
@@ -68,7 +74,7 @@ let view (model : Model) =
                 else
                     imageWithBorder
                         .borderThickness(0.0)
-                        .padding(2.0)
+                        .margin(2.0)
 
                 i <- i + 1
         })
