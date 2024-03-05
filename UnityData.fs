@@ -9,8 +9,6 @@ open MicroUtils.UnityFilesystem
 open MicroUtils.UnityFilesystem.Parsers
 open MicroUtils.UnityFilesystem.Converters
 
-open SpriteGallery.Fabulous.MicroUtils
-
 let mountPoint = @"archive:/"
 
 let getDependenciesAsync dependencylistJson = async {
