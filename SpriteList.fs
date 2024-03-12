@@ -8,7 +8,7 @@ open type Fabulous.Avalonia.View
 
 open SpriteGallery.Fabulous
 
-let view (model : BaseModel) =
+let view (model : SpritesData) =
     (ScrollViewer(
         (VStack() {
             for (sprite, name) in model.Sprites do

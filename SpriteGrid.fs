@@ -17,6 +17,7 @@ type SpriteCell = { CellSpan : int; Sprite : Sprite option; ColumnIndex : int; R
 let tileSize = 64
 let arBias = 0.25
 
+
 let generateLayout (sprites : Sprite seq) columns =
     printfn "generating %i column layout" columns
     let layout =
@@ -46,7 +47,11 @@ let generateLayout (sprites : Sprite seq) columns =
         }
         |> Seq.toArray
 
-    let rows = (layout |> Array.last).RowIndex + 1
+    let rows =
+        if layout.Length > 0 then
+            (layout |> Array.last).RowIndex + 1
+        else 0
+
     printfn "%i rows" rows
 
     layout
@@ -55,23 +60,34 @@ type Msg =
 | Unit
 | Resize of Avalonia.Size
 
-type Model = BaseModel * Avalonia.Size
+type Model = Avalonia.Size
 
-let view (model : BaseModel, windowSize : Avalonia.Size) =
+let init (sprites : SpritesData) = sprites, Avalonia.Size()
+
+let update (msg : Msg) (model : SpritesData * Model) =
+    match msg, model with
+    | Unit, _ -> model
+    | Resize size, (bm, _) -> bm, size
+
+let view (spritesData : SpritesData, windowSize : Avalonia.Size) =
     let mutable i = 0
 
     let padding = 2
     let cellSize = tileSize + (padding * 2)
 
-    let columns = windowSize.Width / Avalonia.PixelSize(cellSize, cellSize).ToSizeWithDpi(96).Width + 1.0 |> int
+    let columns = 
+        windowSize.Width / Avalonia.PixelSize(cellSize, cellSize).ToSizeWithDpi(96).Width + 1.0 |> int
 
     (ScrollViewer(
         (VStack() {
             View.lazy'
                 (fun _ ->
-                    let cells = generateLayout (model.Sprites |> Seq.map (fun (s, _) -> s)) columns
+                    let cells = generateLayout (spritesData.Sprites |> Seq.map (fun (s, _) -> s)) columns
 
-                    let rows = (cells |> Seq.last).RowIndex + 1
+                    let rows =
+                        if cells.Length > 0 then
+                            (cells |> Seq.last).RowIndex + 1
+                        else 0
                     
                     (Grid(coldefs = Array.create columns (Pixel cellSize), rowdefs = Array.create rows (Pixel cellSize)) {
                         for (sprite, cellSpan, column, row) in cells |> Seq.choose (fun c -> c.Sprite |> Option.map (fun s -> s, c.CellSpan, c.ColumnIndex, c.RowIndex)) do
@@ -86,7 +102,7 @@ let view (model : BaseModel, windowSize : Avalonia.Size) =
                                     .gridColumnSpan(cellSpan)
                                     .gridColumn(column)
                                     .gridRow(row)
-                                    .background(SolidColorBrush(Colors.DimGray))
+                                    .background(Colors.Transparent)
 
                             if i = 10 then
                                 imageWithBorder
@@ -101,6 +117,6 @@ let view (model : BaseModel, windowSize : Avalonia.Size) =
                             i <- i + 1
                     })
                 )
-                columns
+                (columns, spritesData.Sprites.Length)
         })
     ))

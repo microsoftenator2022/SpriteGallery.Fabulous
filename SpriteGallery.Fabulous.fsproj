@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
@@ -14,7 +14,7 @@
     <Compile Include="MicroUtilsWrapper.fs" />
     <Compile Include="UnityData.fs" />
     <Compile Include="BundleLoader.fs" />
-    <Compile Include="BaseModel.fs" />
+    <Compile Include="SpritesData.fs" />
     <Compile Include="SpriteList.fs" />
     <Compile Include="SpriteGrid.fs" />
     <Compile Include="App.fs" />

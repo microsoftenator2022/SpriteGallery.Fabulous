@@ -195,7 +195,8 @@ type SpriteGetter (archiveFile : string, ?includeDependencies : bool) =
         UnityFileSystem.MountArchive(file, UnityData.mountPoint)
 
     let includeDependencies = defaultArg includeDependencies true
-    let mutable progress : int * int = (-1, -1)
+    let mutable progress : int * int = (0, 1)
+    let update = Event<int * int>()
 
     let mutable result = None
 
@@ -240,9 +241,10 @@ type SpriteGetter (archiveFile : string, ?includeDependencies : bool) =
         #else
             if current % (total / 100) = 0 then
                 printfn "Loading sprites: %i of %i" current total
-                
-            progress <- (current, total)
         #endif
+            progress <- (current, total)
+
+            update.Trigger(progress)
 
         let textures, sprites = Sprites.get updateProgress (archive :: dependencies |> List.toArray) sfPath
 
@@ -264,6 +266,9 @@ type SpriteGetter (archiveFile : string, ?includeDependencies : bool) =
 
         textures, sprites
 
+    [<CLIEvent>]
+    member _.Update = update.Publish
+
     member _.Progress = progress
     member _.Complete =
         // let (current, total) = progress
@@ -275,6 +280,7 @@ type SpriteGetter (archiveFile : string, ?includeDependencies : bool) =
         let thread =
             System.Threading.ThreadStart (fun () ->
                 result <- get() |> Some
+                update.Trigger progress
                 waitHandle.Force().Set() |> ignore)
             |> System.Threading.Thread
         
@@ -285,7 +291,7 @@ type SpriteGetter (archiveFile : string, ?includeDependencies : bool) =
     member _.Textures = result |> Option.map (fun (ts, _) -> ts)
     member _.Sprites = result |> Option.map (fun (_, ss) -> ss)
 
-    member this.GetAsync ?timeout = async {
+    member this.GetAsync (?timeout) = async {
         let timeout = defaultArg timeout -1
         this.Start()
         return! Async.AwaitWaitHandle(waitHandle.Force(), timeout)
@@ -297,26 +303,31 @@ type SpriteGetter (archiveFile : string, ?includeDependencies : bool) =
                 waitHandle.Value.Dispose()
                 waitHandle <- newWaitHandle()
 
-module BundleLoadView =
-    open type Fabulous.Avalonia.View
+// module BundleLoadView =
+//     open type Fabulous.Avalonia.View
 
-    type LoadProgress = { Complete : bool; Progress : int * int }
+//     type LoadProgress = { Complete : bool; Progress : int * int }
 
-    module LoadProgress =
-        type Msg =
-        | Unit
-        | Update of LoadProgress
+//     [<RequireQualifiedAccess>]
+//     module LoadProgress =
+//         type Msg =
+//         | Unit
+//         | Update of LoadProgress
 
-    let view (model : LoadProgress) =
-        let (current, total) = model.Progress
-        (Dock(true) {
-            Button("Open...", LoadProgress.Unit)
-                .margin(8)
+//         type Model = LoadProgress
 
-            ProgressBar(0, total, current, fun _ -> LoadProgress.Unit)
-                .showProgressText(true)
-                .margin(8)
-        })
-            .verticalAlignment(Avalonia.Layout.VerticalAlignment.Top)
-        
+//         // let update (msg : Msg) (model : BaseModel * Model)
+
+//         let view (model : LoadProgress) =
+//             let (current, total) = model.Progress
+//             (Dock(true) {
+//                 Button("Open...", Unit)
+//                     .margin(8)
+
+//                 ProgressBar(0, total, current, fun _ -> Unit)
+//                     .showProgressText(true)
+//                     .margin(8)
+//             })
+//                 .verticalAlignment(Avalonia.Layout.VerticalAlignment.Top)
+            
     
