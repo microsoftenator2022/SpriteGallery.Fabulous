@@ -5,20 +5,20 @@ open UnityDataTools.FileSystem
 type SpritesData =
     {
         Textures : Map<(int * int64), SpriteTexture>
-        Sprites : (Sprite * string) list
+        Sprites : Sprite array
     }
 
 module SpritesData =
-    let init() = { Textures = Map.empty; Sprites = List.empty }
+    let init() = { Textures = Map.empty; Sprites = Array.empty }
 
     let getResult (sg : SpriteGetter) =
         match (sg.Textures, sg.Sprites) with
         | Some textures, Some sprites ->
             {
                 Textures = textures
-                Sprites = sprites |> Seq.sortBy (fun (_, name) -> name) |> Seq.toList
+                Sprites = sprites |> Seq.toArray
             }
-        | _ -> { Textures = Map.empty; Sprites = [] }
+        | _ -> { Textures = Map.empty; Sprites = [||] }
 
     let loadFromAsync (archiveFile : string) =
         let sg = new SpriteGetter(archiveFile)

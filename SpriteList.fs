@@ -11,7 +11,8 @@ open SpriteGallery.Fabulous
 let view (model : SpritesData) =
     (ScrollViewer(
         (VStack() {
-            for (sprite, name) in model.Sprites do
+            for sprite in model.Sprites do
+                let name = sprite.Name
                 (VStack() {
                     TextBlock($"{name}").centerText()
 

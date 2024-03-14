@@ -38,7 +38,21 @@ type SpriteTexture (bytes : byte[], size : Avalonia.PixelSize) =
     
 type Sprite =
   { Texture : SpriteTexture
-    Rect : Avalonia.PixelRect }
+    Rect : Avalonia.PixelRect
+    Name : string option
+    RenderDataKey : struct (System.Guid * int64) option
+    SerializedFile : string
+    Container : string
+    PathID : int64 }
+with
+    static member Create (texture, rect) =
+      { Texture = texture
+        Rect = rect
+        Name = None
+        RenderDataKey = None
+        SerializedFile = ""
+        Container = ""
+        PathID = 0 }
 
 [<RequireQualifiedAccess>]
 module Sprites =
@@ -51,6 +65,19 @@ module Sprites =
 
         use sf = UnityFileSystem.OpenSerializedFile path
         let sfReader = new UnityBinaryFileReader(sf.Path)
+
+        let assetBundleAsset =
+            sf.Objects
+            |> Seq.tryFind (fun o -> sf.GetTypeTreeRoot(o.Id).Type = "AssetBundle")
+            |> Option.bind (fun o -> TypeTreeValue.Get(sf, sfReader, o).TryGetValue<AssetBundle>() |> toOption)
+            |> Option.map (fun f -> f.Invoke())
+
+        let containerMap = 
+            assetBundleAsset
+            |> Option.toArray
+            |> Seq.collect (fun ab -> ab.ContainerMap)
+            |> Seq.collect (fun cm -> cm.Value |> Seq.map (fun ai -> cm.Key, ai))
+            |> Seq.cache
 
         let mutable readers = [(sf.Path, sfReader)]
 
@@ -119,9 +146,9 @@ module Sprites =
             |> Seq.choose (fun (o, _) ->
                 TypeTreeValue.Get(sf, sfReader, o)
                 |> function
-                | :? Parsers.Sprite as s -> Some s
+                | :? Parsers.Sprite as s -> Some (s, o)
                 | _ -> None)
-            |> Seq.map (fun s ->
+            |> Seq.map (fun (s, o) ->
                 let name =
                     let succ, name = s.ToDictionary().TryGetValue("m_Name")
                     if succ then Some (name.GetValue<string>()) else None
@@ -141,12 +168,13 @@ module Sprites =
                 |> Option.defaultValue ""
                 |> printfn "Load sprite \"%s\""
                 #endif
-                    
+
+                let renderDataKey = s.RenderDataKey |> toOption
+
                 let sprite =
                     match atlas with
                     | Some atlas ->
-                        s.RenderDataKey
-                        |> toOption
+                        renderDataKey
                         |> Option.bind (fun rdk ->
                             let succ, sad = atlas.RenderDataMap.TryGetValue(rdk)
 
@@ -156,7 +184,7 @@ module Sprites =
                             let rect = sad.TextureRect
                             texture
                             |> Option.map (fun texture -> texture, rect))
-                        |> Option.map (fun (texture, rect) -> { Texture = texture; Rect = rect |> toPixelRect })
+                        |> Option.map (fun (texture, rect) -> Sprite.Create(texture, rect |> toPixelRect))
                     | None ->
                         s.TexturePtr
                         |> toOption
@@ -169,13 +197,24 @@ module Sprites =
                                 | Some rect -> rect |> toPixelRect
                                 | None -> Avalonia.PixelRect(Avalonia.PixelPoint(0, 0), texture.Size)
                             
-                            { Texture = texture; Rect = rect }
+                            Sprite.Create(texture, rect)
                         )
                 i <- i + 1
 
                 updateProgress (i, total)
-
-                sprite, name
+                sprite
+                |> Option.map (fun sprite ->
+                    { sprite with
+                        Name = name
+                        RenderDataKey = renderDataKey
+                        SerializedFile = sf.Path
+                        PathID = o.Id
+                        Container =
+                            containerMap
+                            |> Seq.tryFind (fun (_, ai) -> ai.Asset.PathID = o.Id)
+                            |> Option.map (fun (c, _) -> c)
+                            |> Option.defaultValue ""
+                    })
             )
             |> Seq.toArray
 
@@ -208,8 +247,7 @@ type SpriteGetter (archiveFile : string, ?includeDependencies : bool) =
 
         let bundlesDirectory = System.IO.Path.GetDirectoryName(archiveFile)
 
-        let dependencylist =
-            System.IO.Path.Join(bundlesDirectory, "dependencylist.json")
+        let dependencylist = System.IO.Path.Join(bundlesDirectory, "dependencylist.json")
 
         let dependencies =
             if includeDependencies && System.IO.File.Exists dependencylist then
@@ -229,11 +267,11 @@ type SpriteGetter (archiveFile : string, ?includeDependencies : bool) =
 
         let archive = mountArchive archiveFile
 
-        let sfNode =
+        let sfNodes =
             archive.Nodes
-            |> Seq.find (fun n -> n.Flags.HasFlag(ArchiveNodeFlags.SerializedFile))
+            |> Seq.where (fun n -> n.Flags.HasFlag(ArchiveNodeFlags.SerializedFile))
 
-        let sfPath = $"{UnityData.mountPoint}{sfNode.Path}"
+        let sfPaths = sfNodes |> Seq.map (fun sfNode -> $"{UnityData.mountPoint}{sfNode.Path}")
 
         let updateProgress (current, total) =
         #if DEBUG
@@ -246,16 +284,22 @@ type SpriteGetter (archiveFile : string, ?includeDependencies : bool) =
 
             update.Trigger(progress)
 
-        let textures, sprites = Sprites.get updateProgress (archive :: dependencies |> List.toArray) sfPath
+
+        let results =
+            sfPaths
+            |> Seq.map (fun sfPath -> Sprites.get updateProgress (archive :: dependencies |> List.toArray) sfPath)
+            |> Seq.toArray
+
+        let textures =
+            results
+            |> Seq.collect (fun (textures, _) -> textures)
+            |> Seq.map (fun t -> t.Key, t.Value)
+            |> Map.ofSeq
 
         let sprites =
-            sprites
-            |> Seq.choose (
-                function
-                | Some sprite, name ->
-                    Some (sprite, name |> Option.defaultValue "" |> sprintf "%A")
-                | _ -> None
-            )
+            results
+            |> Seq.collect(fun (_, sprites) -> sprites)
+            |> Seq.choose id
 
         archive.Dispose()
         
@@ -302,32 +346,3 @@ type SpriteGetter (archiveFile : string, ?includeDependencies : bool) =
             if waitHandle.IsValueCreated then
                 waitHandle.Value.Dispose()
                 waitHandle <- newWaitHandle()
-
-// module BundleLoadView =
-//     open type Fabulous.Avalonia.View
-
-//     type LoadProgress = { Complete : bool; Progress : int * int }
-
-//     [<RequireQualifiedAccess>]
-//     module LoadProgress =
-//         type Msg =
-//         | Unit
-//         | Update of LoadProgress
-
-//         type Model = LoadProgress
-
-//         // let update (msg : Msg) (model : BaseModel * Model)
-
-//         let view (model : LoadProgress) =
-//             let (current, total) = model.Progress
-//             (Dock(true) {
-//                 Button("Open...", Unit)
-//                     .margin(8)
-
-//                 ProgressBar(0, total, current, fun _ -> Unit)
-//                     .showProgressText(true)
-//                     .margin(8)
-//             })
-//                 .verticalAlignment(Avalonia.Layout.VerticalAlignment.Top)
-            
-    

@@ -1,5 +1,7 @@
 namespace SpriteGallery.Fabulous
 
+open Avalonia.Controls
+open Avalonia.Layout
 open Avalonia.Platform
 open Avalonia.Media.Imaging
 open Avalonia.Themes.Fluent
@@ -9,42 +11,25 @@ open Fabulous.Avalonia
 
 open type Fabulous.Avalonia.View
 
-open UnityDataTools.FileSystem
-
 open SpriteGallery.Fabulous.Views
 
-module App =
-    type ViewModel =
-    | Empty
-    | SpriteGridModel of SpriteGrid.Model
+[<RequireQualifiedAccess>]
+module LoadProgress =
+    type Model = { Complete : bool; Current : int; Max : int; Window : ViewRef<Window>; Sprites : SpritesData option }
 
-    type LoadProgress = { Complete : bool; Current : int; Max : int }
-        with static member Default = { Complete = false; Current = 0; Max = 100 }
+    let init() = { Complete = false; Current = 0; Max = 1; Window = ViewRef<Window>(); Sprites = None }
 
-    type Model =
-      { Sprites : SpritesData
-        ViewModel : ViewModel
-        LoadProgress : LoadProgress
-        WindowRef : ViewRef<Avalonia.Controls.Window> }
-    
     type Msg =
     | Unit
     | OpenFile
+    | LoadProgress of SpriteGetter
     | UpdateSprites of SpritesData
-    | LoadProgressMsg of SpriteGetter
-    | SpriteGridMsg of SpriteGrid.Msg
-
-    // let filePath = @"D:\SteamLibrary\steamapps\common\Warhammer 40,000 Rogue Trader\Bundles\blueprint.assets"
-    // let filePath = @"D:\SteamLibrary\steamapps\common\Warhammer 40,000 Rogue Trader\Bundles\ui"
-
-    let update (msg : Msg) (model : Model) =
-        match msg, model.ViewModel with
-        | SpriteGridMsg msg, SpriteGridModel sgm ->
-            let spritesData, sgm = SpriteGrid.update msg (model.Sprites, sgm)
-
-            { model with Sprites = spritesData; ViewModel = SpriteGridModel sgm }, Cmd.none
-        | OpenFile, _ ->
-            model.WindowRef.TryValue
+    
+    let update msg model =
+        match msg with
+        | Unit -> model, Cmd.none
+        | OpenFile ->
+            model.Window.TryValue
             |> function
             | None ->
                 eprintfn "no windowref"
@@ -70,14 +55,13 @@ module App =
                         let task, sg = SpritesData.loadFromAsync path
                         task |> Async.Ignore |> Async.Start
                         
-                        return Some (LoadProgressMsg sg)
+                        return Some (LoadProgress sg)
                     | None -> return None
                 })
-        | UpdateSprites spritesData, _ -> { model with Sprites = spritesData }, Cmd.none
-        | LoadProgressMsg getter, _ ->
+        | LoadProgress getter ->
             let (current, max) = getter.Progress
 
-            let model = { model with LoadProgress = { Complete = getter.Complete; Current = current; Max = max; } }
+            let model = { model with Complete = getter.Complete; Current = current; Max = max; }
 
             if getter.Complete then
                 printfn "Done"
@@ -92,8 +76,61 @@ module App =
                         Async.AwaitEvent getter.Update
                         // |> Async.Ignore
 
-                    return (LoadProgressMsg getter)
+                    return (LoadProgress getter)
                 })
+        | UpdateSprites spritesData ->
+            { model with Sprites = Some spritesData }, Cmd.none
+            // model,
+            // match model.ViewModel with
+            // | SpriteGridModel _ -> SpriteGrid.UpdateSprites spritesData |> SpriteGrid |> Cmd.ofMsg
+            // | _ -> Cmd.none
+
+module App =
+    type ViewModel =
+    | Empty
+    | SpriteGridModel of SpriteGrid.Model
+
+    type Model =
+      { Sprites : SpritesData
+        ViewModel : ViewModel
+        LoadProgress : LoadProgress.Model }
+    with
+        member this.SelectedSprite =
+            match this.ViewModel with
+            | SpriteGridModel sgModel -> sgModel.SelectedSprite
+            | _ -> None
+
+    type Msg =
+    | Unit
+    | UpdateSprites
+    | SpriteGridMsg of SpriteGrid.Msg
+    | LoadProgressMsg of LoadProgress.Msg
+
+    // let filePath = @"D:\SteamLibrary\steamapps\common\Warhammer 40,000 Rogue Trader\Bundles\blueprint.assets"
+    // let filePath = @"D:\SteamLibrary\steamapps\common\Warhammer 40,000 Rogue Trader\Bundles\ui"
+
+    let update (msg : Msg) (model : Model) =
+        match msg, model.ViewModel with
+        | SpriteGridMsg sgMsg, SpriteGridModel sgModel ->
+            let sgModel, cmd = SpriteGrid.update sgMsg sgModel
+
+            { model with ViewModel = SpriteGridModel sgModel }, Cmd.map SpriteGridMsg cmd
+
+        | LoadProgressMsg lpMsg, _ ->
+            let lpModel, cmd = LoadProgress.update lpMsg model.LoadProgress
+            let model = { model with LoadProgress = lpModel }
+            
+            match lpModel.Sprites with
+            | Some spritesData ->
+                { model with Sprites = spritesData }, Cmd.batch [Cmd.map LoadProgressMsg cmd; Cmd.ofMsg UpdateSprites]
+            | None -> model, Cmd.map LoadProgressMsg cmd
+
+        | UpdateSprites, viewModel ->
+            match viewModel with
+            | Empty -> model, Cmd.none
+            | SpriteGridModel _ ->
+                model, Cmd.map SpriteGridMsg (model.Sprites |> SpriteGrid.UpdateSprites |> Cmd.ofMsg)
+
         | Unit, _ -> model, Cmd.none
         | _, Empty -> model, Cmd.none
 
@@ -102,44 +139,51 @@ module App =
             let view =
                 (Dock(true) {
                     (Dock(true) {
-                        Button("Open...", OpenFile)
-                            .dock(Avalonia.Controls.Dock.Bottom)
+                        Button("Open...", LoadProgressMsg LoadProgress.OpenFile)
+                            .dock(Dock.Bottom)
                             .margin(0, 2, 2, 0)
 
                         ProgressBar(0, model.LoadProgress.Max, model.LoadProgress.Current, fun _ -> Unit)
-                            .dock(Avalonia.Controls.Dock.Top)
+                            .dock(Dock.Top)
                     })
-                        .dock(Avalonia.Controls.Dock.Bottom)
+                        .dock(Dock.Bottom)
                         .margin(2)
                     
-                    (Panel() {
-                        match model.ViewModel with
-                        | SpriteGridModel size ->
-                            View.map SpriteGridMsg (SpriteGrid.view (model.Sprites, size))
-                        | Empty -> ()
-                    })
-                        .margin(1)
+                    let content =
+                        (Panel() {
+                            match model.ViewModel with
+                            | SpriteGridModel sgm ->
+                                View.map SpriteGridMsg (SpriteGrid.view sgm)
+                            | Empty -> ()
+                        })
+
+                    // content
+
+                    SplitView(
+                        (View.map (fun _ -> Unit) (SpriteDetailsPanel.view model.SelectedSprite)),
+                        content)
+                            .displayMode(SplitViewDisplayMode.Inline)
+                            .isPaneOpen(true)
+                            .panePlacement(SplitViewPanePlacement.Right)
+                            .openPaneLength(450)
+                            .margin(1)
                 })
 
             Window(view)
-                .onResized(fun args -> args.ClientSize |> SpriteGrid.Msg.Resize |> SpriteGridMsg)
-                .reference(model.WindowRef)
-                .transparencyLevelHint([Avalonia.Controls.WindowTransparencyLevel.AcrylicBlur])
+                .reference(model.LoadProgress.Window)
+                .transparencyLevelHint([WindowTransparencyLevel.AcrylicBlur])
                 .background(Avalonia.Media.Colors.Transparent)
 
         DesktopApplication(window)
 
     let init () =
-        let spritesData, sgm = SpritesData.init() |> SpriteGrid.init
+        let spritesData = SpritesData.init()
 
         { 
             Sprites = spritesData
-            ViewModel = sgm |> SpriteGridModel
-            LoadProgress = LoadProgress.Default
-            WindowRef = ViewRef<Avalonia.Controls.Window>()
+            ViewModel = SpriteGrid.init spritesData |> SpriteGridModel
+            LoadProgress = LoadProgress.init()
         }, Cmd.none
-
-        // LoadProgressModel ({ Complete = false; Progress = (0, 100)}),
 
     let theme = FluentTheme()
     let program = Program.statefulWithCmd init update app
