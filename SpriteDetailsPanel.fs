@@ -36,7 +36,7 @@ let view (sprite : Sprite option) =
                     .gridColumn(0)
                     .margin(margin, margin, margin, margin / 4 |> float)
                 
-                (TextBox(sprite |> Option.map (fun s -> s.Rect.Width.ToString()) |> Option.defaultValue "", fun _ -> Cmd.none)
+                (TextBox(sprite |> Option.map (fun s -> s.Rect.Width.ToString()) |> Option.defaultValue "", ignore)
                 |> setValueStyle)
                     .gridRow(0)
                     .gridColumn(1)
@@ -48,7 +48,7 @@ let view (sprite : Sprite option) =
                     .gridColumn(0)
                     .margin(margin, margin / 4 |> float, margin, margin)
                 
-                (TextBox(sprite |> Option.map (fun s -> s.Rect.Height.ToString()) |> Option.defaultValue "", fun _ -> Cmd.none)
+                (TextBox(sprite |> Option.map (fun s -> s.Rect.Height.ToString()) |> Option.defaultValue "", ignore)
                 |> setValueStyle)
                     .gridRow(1)
                     .gridColumn(1)
@@ -56,13 +56,13 @@ let view (sprite : Sprite option) =
             })
                 .horizontalAlignment(HorizontalAlignment.Right)
 
-            (Grid(coldefs = [Auto; Star], rowdefs = [Auto; Auto; Auto; Auto; Auto]) {
+            (Grid(coldefs = [Auto; Star], rowdefs = [Auto; Auto; Auto; Auto; Auto; Auto]) {
                 (TextBlock("Name")
                 |> setLabelTextStyle)
                     .gridRow(0)
                     .gridColumn(0)
                     
-                (TextBox(sprite |> Option.bind (fun s -> s.Name) |> Option.defaultValue "", fun _ -> Cmd.none)
+                (TextBox(sprite |> Option.bind (fun s -> s.Name) |> Option.defaultValue "", ignore)
                 |> setValueStyle)
                     .gridRow(0)
                     .gridColumn(1)
@@ -74,7 +74,7 @@ let view (sprite : Sprite option) =
 
                 let container = sprite |> Option.map (fun s -> s.Container) |> Option.defaultValue ""
 
-                (TextBox(container, fun _ -> Cmd.none)
+                (TextBox(container, ignore)
                 |> setValueStyle)
                     .gridRow(1)
                     .gridColumn(1)
@@ -86,30 +86,64 @@ let view (sprite : Sprite option) =
 
                 let pathID = sprite |> Option.map (fun s -> s.PathID.ToString()) |> Option.defaultValue ""
 
-                (TextBox(pathID, fun _ -> Cmd.none)
+                (TextBox(pathID, ignore)
                 |> setValueStyle)
                     .gridRow(2)
                     .gridColumn(1)
 
-                (TextBlock("RenderDataKey")
+                // (TextBlock("RenderDataKey")
+                // |> setLabelTextStyle)
+                //     .gridRow(3)
+                //     .gridRowSpan(2)
+                //     .gridColumn(0)
+
+                // let renderDataKey = sprite |> Option.bind (fun s -> s.RenderDataKey)
+
+                // (TextBox(renderDataKey |> Option.map (fun struct (guid, _) -> guid.ToString("n")) |> Option.defaultValue "", ignore)
+                // |> setValueStyle)
+                //     .gridRow(3)
+                //     .gridColumn(1)
+                //     .margin(margin, margin, margin, margin / 4 |> float)
+                
+                // (TextBox(renderDataKey |> Option.map (fun struct (_, fid) -> fid.ToString()) |> Option.defaultValue "", ignore)
+                // |> setValueStyle)
+                //     .gridRow(4)
+                //     .gridColumn(1)
+                //     .margin(margin, margin / 4 |> float, margin, margin)
+
+                let blueprintReference = sprite |> Option.bind (fun s -> s.BlueprintReference)
+
+                (TextBlock("Blueprint Reference")
                 |> setLabelTextStyle)
                     .gridRow(3)
-                    .gridRowSpan(2)
                     .gridColumn(0)
+                    .gridColumnSpan(2)
+                    // .centerHorizontal()
 
-                let renderDataKey = sprite |> Option.bind (fun s -> s.RenderDataKey)
-
-                (TextBox(renderDataKey |> Option.map (fun struct (guid, _) -> guid.ToString("n")) |> Option.defaultValue "", fun _ -> Cmd.none)
-                |> setValueStyle)
-                    .gridRow(3)
-                    .gridColumn(1)
+                (TextBlock("AssetId")
+                |> setLabelTextStyle)
+                    .gridRow(4)
+                    .gridColumn(0)
                     .margin(margin, margin, margin, margin / 4 |> float)
-                
-                (TextBox(renderDataKey |> Option.map (fun struct (_, fid) -> fid.ToString()) |> Option.defaultValue "", fun _ -> Cmd.none)
+
+                (TextBox(blueprintReference |> Option.map (fun (assetId, _) -> assetId) |> Option.defaultValue "", ignore)
                 |> setValueStyle)
                     .gridRow(4)
                     .gridColumn(1)
+                    .margin(margin, margin, margin, margin / 4 |> float)
+
+                (TextBlock("FileId")
+                |> setLabelTextStyle)
+                    .gridRow(5)
+                    .gridColumn(0)
                     .margin(margin, margin / 4 |> float, margin, margin)
+
+                (TextBox(blueprintReference |> Option.map (fun (_, fid) -> fid.ToString()) |> Option.defaultValue "", ignore)
+                |> setValueStyle)
+                    .gridRow(5)
+                    .gridColumn(1)
+                    .margin(margin, margin / 4 |> float, margin, margin)
+
             })
                 .horizontalAlignment(HorizontalAlignment.Stretch)
         })
@@ -129,3 +163,4 @@ let view (sprite : Sprite option) =
             .stretchDirection(StretchDirection.DownOnly)
     })
         .horizontalAlignment(HorizontalAlignment.Stretch)
+    

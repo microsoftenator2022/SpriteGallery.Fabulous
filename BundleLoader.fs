@@ -35,6 +35,8 @@ type SpriteTexture (bytes : byte[], size : Avalonia.PixelSize) =
         member this.Dispose() =
             if this.Bitmap.IsValueCreated then
                 this.Bitmap.Value.Dispose()
+
+    override this.Finalize() = (this :> System.IDisposable).Dispose()
     
 type Sprite =
   { Texture : SpriteTexture
@@ -43,7 +45,8 @@ type Sprite =
     RenderDataKey : struct (System.Guid * int64) option
     SerializedFile : string
     Container : string
-    PathID : int64 }
+    PathID : int64
+    BlueprintReference : (string * int64) option }
 with
     static member Create (texture, rect) =
       { Texture = texture
@@ -52,7 +55,8 @@ with
         RenderDataKey = None
         SerializedFile = ""
         Container = ""
-        PathID = 0 }
+        PathID = 0
+        BlueprintReference = None }
 
 [<RequireQualifiedAccess>]
 module Sprites =
@@ -76,8 +80,32 @@ module Sprites =
             assetBundleAsset
             |> Option.toArray
             |> Seq.collect (fun ab -> ab.ContainerMap)
-            |> Seq.collect (fun cm -> cm.Value |> Seq.map (fun ai -> cm.Key, ai))
-            |> Seq.cache
+            |> Seq.collect (fun cm -> cm.Value |> Seq.map (fun ai -> ai.Asset.PathID, cm.Key))
+            |> Map.ofSeq
+
+        let blueprintReferencedAssets =
+            sf.Objects
+            |> Seq.where (fun o ->
+                let tt = sf.GetTypeTreeRoot(o.Id)
+                tt.Type = "MonoBehaviour"
+                && tt.Children |> Seq.exists (fun c -> c.Name = "m_Entries" && c.Type = "Entry"))
+            |> Seq.choose (fun o -> TypeTreeValue.Get(sf, sfReader, o).TryGetObject() |> toOption)
+            |> Seq.tryFind (fun o -> o |> TypeTreeObject.tryGetField "m_Name" = Some "BlueprintReferencedAssets")
+            |> Option.bind (TypeTreeObject.toMap >> Map.tryFind "m_Entries")
+            |> Option.bind (fun o -> o.TryGetObject() |> toOption)
+            |> Option.bind (TypeTreeObject.toMap >> Map.tryFind "Array")
+            |> Option.bind (fun o -> o.TryGetArray<ITypeTreeObject>() |> toOption)
+            |> Option.toArray
+            |> Seq.collect id
+            |> Seq.choose (fun o ->
+                let assetId = o |> TypeTreeObject.tryGetField<string> "AssetId"
+                let fileId = o |> TypeTreeObject.tryGetField<int64> "FileId"
+                let asset = o |> TypeTreeObject.tryGetField<PPtr> "Asset"
+
+                match assetId, fileId, asset with
+                | Some assetId, Some fileId, Some asset -> Some (asset.PathID, (assetId, fileId))
+                | _ -> None)
+            |> Map.ofSeq
 
         let mutable readers = [(sf.Path, sfReader)]
 
@@ -211,9 +239,11 @@ module Sprites =
                         PathID = o.Id
                         Container =
                             containerMap
-                            |> Seq.tryFind (fun (_, ai) -> ai.Asset.PathID = o.Id)
-                            |> Option.map (fun (c, _) -> c)
+                            |> Map.tryFind o.Id
                             |> Option.defaultValue ""
+                        BlueprintReference =
+                            blueprintReferencedAssets
+                            |> Map.tryFind o.Id
                     })
             )
             |> Seq.toArray
@@ -284,7 +314,6 @@ type SpriteGetter (archiveFile : string, ?includeDependencies : bool) =
 
             update.Trigger(progress)
 
-
         let results =
             sfPaths
             |> Seq.map (fun sfPath -> Sprites.get updateProgress (archive :: dependencies |> List.toArray) sfPath)
@@ -346,3 +375,5 @@ type SpriteGetter (archiveFile : string, ?includeDependencies : bool) =
             if waitHandle.IsValueCreated then
                 waitHandle.Value.Dispose()
                 waitHandle <- newWaitHandle()
+
+    override this.Finalize() = (this :> System.IDisposable).Dispose()

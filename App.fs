@@ -36,8 +36,7 @@ module LoadProgress =
                 model, Cmd.none
             | Some window ->
                 model,
-                Cmd.ofAsyncMsgOption (async
-                {
+                Cmd.ofAsyncMsgOption (async {
                     let fpo = Storage.FilePickerOpenOptions()
                     fpo.AllowMultiple <- false
 
@@ -74,16 +73,11 @@ module LoadProgress =
                 model, Cmd.ofAsyncMsg (async {
                     let! _ = 
                         Async.AwaitEvent getter.Update
-                        // |> Async.Ignore
 
                     return (LoadProgress getter)
                 })
         | UpdateSprites spritesData ->
             { model with Sprites = Some spritesData }, Cmd.none
-            // model,
-            // match model.ViewModel with
-            // | SpriteGridModel _ -> SpriteGrid.UpdateSprites spritesData |> SpriteGrid |> Cmd.ofMsg
-            // | _ -> Cmd.none
 
 module App =
     type ViewModel =
@@ -122,7 +116,9 @@ module App =
             
             match lpModel.Sprites with
             | Some spritesData ->
-                { model with Sprites = spritesData }, Cmd.batch [Cmd.map LoadProgressMsg cmd; Cmd.ofMsg UpdateSprites]
+                let model = { model with Sprites = spritesData }
+
+                model, Cmd.batch [Cmd.map LoadProgressMsg cmd; Cmd.ofMsg UpdateSprites]
             | None -> model, Cmd.map LoadProgressMsg cmd
 
         | UpdateSprites, viewModel ->
@@ -157,11 +153,8 @@ module App =
                             | Empty -> ()
                         })
 
-                    // content
-
                     SplitView(
-                        (View.map (fun _ -> Unit) (SpriteDetailsPanel.view model.SelectedSprite)),
-                        content)
+                        (View.map (fun _ -> Unit) (SpriteDetailsPanel.view model.SelectedSprite)), content)
                             .displayMode(SplitViewDisplayMode.Inline)
                             .isPaneOpen(true)
                             .panePlacement(SplitViewPanePlacement.Right)

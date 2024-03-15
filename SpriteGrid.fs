@@ -30,7 +30,7 @@ let generateLayout (sprites : Sprite seq) columns =
 
                 let cellSpan =
                     if rect.Width > tileSize then
-                        max 1 (ceil (aspectRatio - arBias) |> int)
+                        min (max 1 (ceil (aspectRatio - arBias) |> int)) (columns - 1)
                     else 1
 
                 // if cellSpan > 1 then
@@ -115,18 +115,19 @@ let view (model : Model) =
                         for (sprite, cellSpan, column, row) in cells |> Seq.choose (fun c -> c.Sprite |> Option.map (fun s -> s, c.CellSpan, c.ColumnIndex, c.RowIndex)) do
                             let index = i
                             let image =
-                                Image(Stretch.Uniform, CroppedBitmap(sprite.Texture.Bitmap.Force(), sprite.Rect))
-                                    .renderTransform(ScaleTransform(1, -1))
-                                    .centerHorizontal()
-                                    .centerVertical()
+                                ViewBox(
+                                    Image(Stretch.Uniform, CroppedBitmap(sprite.Texture.Bitmap.Force(), sprite.Rect))
+                                        .renderTransform(ScaleTransform(1, -1))
+                                        .center()
+                                        .size(sprite.Rect.Width, sprite.Rect.Height))
                                     .stretchDirection(StretchDirection.DownOnly)
-                                    .onTapped(fun _ -> SpriteSelected index)
-
+                                    
                             let imageWithBorder =
                                 Border(image)
                                     .gridColumnSpan(cellSpan)
                                     .gridColumn(column)
                                     .gridRow(row)
+                                    .onTapped(fun _ -> SpriteSelected index)
                                     .background(Colors.Transparent)
                                     
                             if model.SelectedSpriteIndex = Some index then
