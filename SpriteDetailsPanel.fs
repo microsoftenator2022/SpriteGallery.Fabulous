@@ -1,4 +1,4 @@
-module SpriteGallery.Fabulous.SpriteDetailsPanel
+module SpriteGallery.Fabulous.Views.SpriteDetailsPanel
 
 open Avalonia.Controls
 open Avalonia.Layout
@@ -10,6 +10,7 @@ open Fabulous.Avalonia
 open type Fabulous.Avalonia.View
 
 open SpriteGallery.Fabulous
+open SpriteGallery.Fabulous.Common
 
 let view (sprite : Sprite option) =
     (Dock(true) {
@@ -163,4 +164,3 @@ let view (sprite : Sprite option) =
             .stretchDirection(StretchDirection.DownOnly)
     })
         .horizontalAlignment(HorizontalAlignment.Stretch)
-    

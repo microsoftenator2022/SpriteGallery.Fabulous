@@ -15,19 +15,12 @@ open UnityData
 
 open MicroUtils.Interop
 
+open SpriteGallery.Fabulous.Common
+
 type MicroOption<'a> = MicroUtils.Functional.Option<'a>
 
 type SpriteTexture (bytes : byte[], size : Avalonia.PixelSize) =
-    let createBitmap() =
-        new Avalonia.Media.Imaging.Bitmap(
-            Avalonia.Platform.PixelFormat.Bgra8888,
-            Avalonia.Platform.AlphaFormat.Unpremul,
-            System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(bytes, 0),
-            size,
-            Avalonia.Vector(96, 96),
-            size.Width * 4)
-
-    member val Bitmap = lazy (createBitmap())
+    member val Bitmap = lazy (createBitmap bytes size)
     member _.Bytes = bytes
     member _.Size = size
 
@@ -178,8 +171,10 @@ module Sprites =
                 | _ -> None)
             |> Seq.map (fun (s, o) ->
                 let name =
-                    let succ, name = s.ToDictionary().TryGetValue("m_Name")
-                    if succ then Some (name.GetValue<string>()) else None
+                    match s.ToDictionary().TryGetValue("m_Name") with
+                    | true, name ->
+                        Some (name.GetValue<string>()) 
+                    | _ -> None
 
                 let atlas =
                     s.AtlasPtr

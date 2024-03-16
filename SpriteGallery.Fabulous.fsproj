@@ -1,9 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <ApplicationIcon>owlcat_suspecting_framed.ico</ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup>
     <AvaloniaPlatform>$([MSBuild]::GetTargetPlatformIdentifier($(TargetFramework)))</AvaloniaPlatform>
@@ -13,12 +14,16 @@
   <ItemGroup>
     <Compile Include="MicroUtilsWrapper.fs" />
     <Compile Include="UnityData.fs" />
+    <Compile Include="Common.fs" />
     <Compile Include="BundleLoader.fs" />
     <Compile Include="SpritesData.fs" />
     <Compile Include="SpriteList.fs" />
     <Compile Include="SpriteGrid.fs" />
     <Compile Include="SpriteDetailsPanel.fs" />
     <Compile Include="App.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="owlcat_suspecting_framed.png" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Properties\**" />

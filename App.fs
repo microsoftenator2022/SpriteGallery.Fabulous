@@ -11,13 +11,24 @@ open Fabulous.Avalonia
 
 open type Fabulous.Avalonia.View
 
+open SpriteGallery.Fabulous.Common
 open SpriteGallery.Fabulous.Views
 
 [<RequireQualifiedAccess>]
 module LoadProgress =
-    type Model = { Complete : bool; Current : int; Max : int; Window : ViewRef<Window>; Sprites : SpritesData option }
+    type Model =
+      { Complete : bool
+        Current : int
+        Max : int
+        Window : ViewRef<Window>
+        Sprites : SpritesData option }
 
-    let init() = { Complete = false; Current = 0; Max = 1; Window = ViewRef<Window>(); Sprites = None }
+    let init windowRef =
+        { Complete = false
+          Current = 0
+          Max = 1
+          Window = windowRef
+          Sprites = None }
 
     type Msg =
     | Unit
@@ -60,7 +71,7 @@ module LoadProgress =
         | LoadProgress getter ->
             let (current, max) = getter.Progress
 
-            let model = { model with Complete = getter.Complete; Current = current; Max = max; }
+            let model = { model with Sprites = None; Complete = getter.Complete; Current = current; Max = max; }
 
             if getter.Complete then
                 printfn "Done"
@@ -87,7 +98,8 @@ module App =
     type Model =
       { Sprites : SpritesData
         ViewModel : ViewModel
-        LoadProgress : LoadProgress.Model }
+        LoadProgress : LoadProgress.Model
+        Window : ViewRef<Window> }
     with
         member this.SelectedSprite =
             match this.ViewModel with
@@ -100,8 +112,14 @@ module App =
     | SpriteGridMsg of SpriteGrid.Msg
     | LoadProgressMsg of LoadProgress.Msg
 
-    // let filePath = @"D:\SteamLibrary\steamapps\common\Warhammer 40,000 Rogue Trader\Bundles\blueprint.assets"
-    // let filePath = @"D:\SteamLibrary\steamapps\common\Warhammer 40,000 Rogue Trader\Bundles\ui"
+    let tryGetAppIcon() =
+        let resourceName = "SpriteGallery.Fabulous.owlcat_suspecting_framed.png"
+
+        let ass = System.Reflection.Assembly.GetExecutingAssembly()
+        
+        if ass.GetManifestResourceNames() |> Seq.contains resourceName then
+            ass.GetManifestResourceStream(resourceName) |> Some
+        else None
 
     let update (msg : Msg) (model : Model) =
         match msg, model.ViewModel with
@@ -112,14 +130,22 @@ module App =
 
         | LoadProgressMsg lpMsg, _ ->
             let lpModel, cmd = LoadProgress.update lpMsg model.LoadProgress
-            let model = { model with LoadProgress = lpModel }
-            
-            match lpModel.Sprites with
-            | Some spritesData ->
-                let model = { model with Sprites = spritesData }
 
-                model, Cmd.batch [Cmd.map LoadProgressMsg cmd; Cmd.ofMsg UpdateSprites]
-            | None -> model, Cmd.map LoadProgressMsg cmd
+            let sprites = model.Sprites
+
+            let model =
+                { model with
+                    LoadProgress = lpModel
+                    Sprites = 
+                        match lpModel.Sprites with
+                        | Some spritesData -> spritesData
+                        | None -> SpritesData.init()
+                }
+
+            model,
+            if sprites <> model.Sprites then
+                Cmd.batch [Cmd.map LoadProgressMsg cmd; Cmd.ofMsg UpdateSprites]
+            else Cmd.map LoadProgressMsg cmd
 
         | UpdateSprites, viewModel ->
             match viewModel with
@@ -131,52 +157,102 @@ module App =
         | _, Empty -> model, Cmd.none
 
     let app (model : Model) =
+        let acrylicColor =
+            model.Window |> tryGetColor "SystemAltMediumHighColor" |> Option.defaultValue Avalonia.Media.Colors.DimGray
+        let panelAcrylicColor =
+            model.Window |> tryGetColor "SystemAltMediumColor" |> Option.defaultValue Avalonia.Media.Colors.Gray
+        let highlightBrush =
+            model.Window |> tryGetThemeResource<Avalonia.Media.IBrush> "SystemControlHighlightAccentBrush" |> Option.defaultValue Avalonia.Media.Brushes.Blue
+
+        let icon =
+            tryGetAppIcon()
+            |> Option.map (fun stream ->
+                let bitmap = new Avalonia.Media.Imaging.Bitmap(stream)
+
+                stream.Dispose()
+
+                bitmap)
+
         let window =
             let view =
-                (Dock(true) {
-                    (Dock(true) {
-                        Button("Open...", LoadProgressMsg LoadProgress.OpenFile)
-                            .dock(Dock.Bottom)
-                            .margin(0, 2, 2, 0)
+                (Panel() {
 
-                        ProgressBar(0, model.LoadProgress.Max, model.LoadProgress.Current, fun _ -> Unit)
-                            .dock(Dock.Top)
-                    })
-                        .dock(Dock.Bottom)
-                        .margin(2)
-                    
+                    // (Panel() {
+                    //     TextBlock("SpriteGallery")
+                    // })
+                    //     .margin(8)
+                    //     .dock(Dock.Top)
+                    //     .isHitTestVisible(false)
+
+                    // match model.Window.Value.TryGetResource("SomeKey") with
+                    // | true, value -> ()
+                    // | _ -> ()
+
+                    let loadProgress = 
+                        (VStack() {
+                            ProgressBar(0, model.LoadProgress.Max, model.LoadProgress.Current, fun _ -> Unit)
+                                .horizontalAlignment(HorizontalAlignment.Stretch)
+
+                            Button("Open...", LoadProgressMsg LoadProgress.OpenFile)
+                                .margin(0, 2, 2, 0)
+                                .horizontalAlignment(HorizontalAlignment.Left)
+                        })
+
                     let content =
-                        (Panel() {
+                        (Dock(true) {
+                            loadProgress
+                                .dock(Dock.Bottom)
+
                             match model.ViewModel with
                             | SpriteGridModel sgm ->
+                                let sgm = { sgm with HighlightBrush = highlightBrush }
+
                                 View.map SpriteGridMsg (SpriteGrid.view sgm)
                             | Empty -> ()
                         })
+                            .margin(4)
 
-                    SplitView(
-                        (View.map (fun _ -> Unit) (SpriteDetailsPanel.view model.SelectedSprite)), content)
-                            .displayMode(SplitViewDisplayMode.Inline)
-                            .isPaneOpen(true)
-                            .panePlacement(SplitViewPanePlacement.Right)
-                            .openPaneLength(450)
-                            .margin(1)
+                    let details =
+                        (View.map (fun _ -> Unit) (SpriteDetailsPanel.view model.SelectedSprite))
+                            .margin(4)
+                        |> withAcrylic (acrylicMaterial panelAcrylicColor)
+                    
+                    SplitView(details, content)
+                        .displayMode(SplitViewDisplayMode.Inline)
+                        .isPaneOpen(true)
+                        .panePlacement(SplitViewPanePlacement.Right)
+                        .openPaneLength(450)
+                        .paneBackground(Avalonia.Media.Colors.Transparent)
+
                 })
+                |> withAcrylic (acrylicMaterial acrylicColor)
 
             Window(view)
-                .reference(model.LoadProgress.Window)
+                .reference(model.Window)
                 .transparencyLevelHint([WindowTransparencyLevel.AcrylicBlur])
                 .background(Avalonia.Media.Colors.Transparent)
+
+        let window =
+            match icon with
+            | Some icon ->
+                window.icon(icon)
+            | None -> window
 
         DesktopApplication(window)
 
     let init () =
         let spritesData = SpritesData.init()
-
-        { 
-            Sprites = spritesData
-            ViewModel = SpriteGrid.init spritesData |> SpriteGridModel
-            LoadProgress = LoadProgress.init()
-        }, Cmd.none
+        let windowRef = ViewRef<Window>()
+        
+        let model =
+            {
+                Sprites = spritesData
+                ViewModel = SpriteGrid.init spritesData windowRef |> SpriteGridModel
+                LoadProgress = LoadProgress.init windowRef
+                Window = windowRef
+            }
+        
+        model, Cmd.none
 
     let theme = FluentTheme()
     let program = Program.statefulWithCmd init update app
