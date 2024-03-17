@@ -2,26 +2,16 @@ namespace SpriteGallery.Fabulous
 
 open UnityDataTools.FileSystem
 
+open SpriteGallery.Fabulous.Common
+
 type SpritesData =
     {
         Textures : Map<(int * int64), SpriteTexture>
         Sprites : Sprite array
     }
 
-module Texture =
-    let copyRect (textureBytes : System.Span<byte>) stride (rect : Avalonia.PixelRect) (dest : System.Span<byte>) =
-        for n in 0..(rect.Height - 1) do
-            let line = textureBytes.Slice((n + rect.Y) * stride, stride)
-            let xBytes = rect.X * 4
-            let widthBytes = rect.Width * 4
-
-            let source = line.Slice(xBytes, widthBytes)
-            let destLine = dest.Slice((rect.Height - n - 1) * widthBytes, widthBytes)
-            
-            source.CopyTo(destLine)
-
 module SpritesData =
-    let init() = { Textures = Map.empty; Sprites = Array.empty }
+    let init() = { Textures = Map.empty; Sprites = [||] }
 
     let getResult (sg : SpriteGetter) =
         match (sg.Textures, sg.Sprites) with

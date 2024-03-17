@@ -16,7 +16,7 @@ let view (model : SpritesData) =
                 (VStack() {
                     TextBlock($"{name}").centerText()
 
-                    Image(Avalonia.Media.Stretch.None, CroppedBitmap(sprite.Texture.Bitmap.Force(), sprite.Rect)).renderTransform(ScaleTransform(1, -1))
+                    Image(Avalonia.Media.Stretch.None, CroppedBitmap(sprite.BaseTexture.Bitmap.Force(), sprite.Rect)).renderTransform(ScaleTransform(1, -1))
                 }).centerHorizontal()
 
                 Separator()

@@ -8,6 +8,8 @@ open Fabulous.Avalonia
 
 open type Fabulous.Avalonia.View
 
+
+
 let withAcrylic material content =
     ExperimentalAcrylicBorder(content)
         .material(material)
@@ -35,6 +37,18 @@ let tryGetThemeResource<'a> name (window : ViewRef<Window>) : 'a option =
 
 let tryGetColor name (window : ViewRef<Window>) = tryGetThemeResource<Color> name window
 
+let copyRect (textureBytes : System.Span<byte>) stride (rect : Avalonia.PixelRect) (dest : System.Span<byte>) =
+    let xOffsetBytes = rect.X * 4
+    let widthBytes = rect.Width * 4
+
+    for n in 0..(rect.Height - 1) do
+        let line = textureBytes.Slice((n + rect.Y) * stride, stride)
+
+        let source = line.Slice(xOffsetBytes, widthBytes)
+        let destLine = dest.Slice((rect.Height - n - 1) * widthBytes, widthBytes)
+        
+        source.CopyTo(destLine)
+
 let createBitmap bytes size =
     new Avalonia.Media.Imaging.Bitmap(
         Avalonia.Platform.PixelFormat.Bgra8888,
@@ -43,4 +57,84 @@ let createBitmap bytes size =
         size,
         Avalonia.Vector(96, 96),
         size.Width * 4)
-        
+
+type SpriteTexture (bytes : byte[], size : Avalonia.PixelSize) =
+    member val Bitmap = lazy (createBitmap bytes size)
+    member _.Bytes = bytes
+    member _.Size = size
+
+    interface System.IDisposable with
+        member this.Dispose() =
+            if this.Bitmap.IsValueCreated then
+                this.Bitmap.Value.Dispose()
+
+    override this.Finalize() = (this :> System.IDisposable).Dispose()
+    
+type Sprite =
+  { BaseTexture : SpriteTexture
+    Rect : Avalonia.PixelRect
+    Name : string option
+    RenderDataKey : struct (System.Guid * int64) option
+    SerializedFile : string
+    Container : string
+    PathID : int64
+    BlueprintReference : (string * int64) option
+    mutable ScaledBitmapCache : Avalonia.Media.Imaging.Bitmap array }
+with
+    static member Create (texture, rect) =
+      { BaseTexture = texture
+        Rect = rect
+        Name = None
+        RenderDataKey = None
+        SerializedFile = ""
+        Container = ""
+        PathID = 0
+        BlueprintReference = None
+        ScaledBitmapCache = [||] }
+
+    interface System.IDisposable with
+        member this.Dispose() =
+            let scaledBitmapCache = this.ScaledBitmapCache
+            this.ScaledBitmapCache <- [||]
+            for bitmap in scaledBitmapCache do
+                bitmap.Dispose()
+
+    override this.Finalize() = (this :> System.IDisposable).Dispose()
+
+    member this.GetHeightScaledBitmap (height : int, ?scaleTolerance : float, ?fractional : bool) =
+        let scaleTolerance = defaultArg scaleTolerance 0.0
+        let fractional = defaultArg fractional false
+
+        let isWholeNumber (x : float) =
+            x - (x |> int |> float) = 0.0
+
+        let cached = 
+            this.ScaledBitmapCache
+            |> Array.tryFind (fun b -> b.PixelSize.Height = height)
+            |> Option.orElseWith (fun () ->
+                if scaleTolerance = 0.0 then None
+                else
+                    this.ScaledBitmapCache
+                    |> Seq.map (fun b -> b, ((b.PixelSize.Height |> float) / (height |> float)) - 1.0)
+                    |> Seq.where (fun (_, scaleDelta) -> fractional || (scaleDelta |> isWholeNumber))
+                    |> Seq.where (fun (_, scaleDelta) -> scaleDelta > 0.0 && scaleDelta < scaleTolerance)
+                    |> Seq.sortBy (fun (_, scaleDelta) -> scaleDelta)
+                    |> Seq.map (fun (b, _) -> b)
+                    |> Seq.tryHead)
+
+        match cached with
+        | Some bitmap -> bitmap
+        | None ->
+            let bytes = Array.zeroCreate<byte> (this.Rect.Width * this.Rect.Height * 4)
+
+            copyRect (System.Span(this.BaseTexture.Bytes)) (this.BaseTexture.Size.Width * 4) (this.Rect) (System.Span(bytes))
+
+            use bitmap = createBitmap bytes (this.Rect.Size)
+
+            let width = ((bitmap.PixelSize.Width |> float) / (bitmap.PixelSize.Height |> float)) * (height |> float) |> int
+
+            let bitmap = bitmap.CreateScaledBitmap(Avalonia.PixelSize(width, height))
+
+            this.ScaledBitmapCache <- this.ScaledBitmapCache |> Array.appendOne bitmap
+            
+            bitmap

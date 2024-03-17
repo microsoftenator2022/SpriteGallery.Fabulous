@@ -153,7 +153,7 @@ let view (sprite : Sprite option) =
         ViewBox(
             match sprite with
             | Some sprite ->
-                Image(Stretch.Uniform, CroppedBitmap(sprite.Texture.Bitmap.Force(), sprite.Rect))
+                Image(Stretch.Uniform, CroppedBitmap(sprite.BaseTexture.Bitmap.Force(), sprite.Rect))
                     .renderTransform(ScaleTransform(1, -1))
                     .size(sprite.Rect.Width, sprite.Rect.Height)
             | None ->

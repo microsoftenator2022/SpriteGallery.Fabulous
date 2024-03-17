@@ -121,6 +121,15 @@ module App =
             ass.GetManifestResourceStream(resourceName) |> Some
         else None
 
+    let icon =
+        tryGetAppIcon()
+        |> Option.map (fun stream ->
+            let bitmap = new Avalonia.Media.Imaging.Bitmap(stream)
+
+            stream.Dispose()
+
+            bitmap)
+
     let update (msg : Msg) (model : Model) =
         match msg, model.ViewModel with
         | SpriteGridMsg sgMsg, SpriteGridModel sgModel ->
@@ -163,15 +172,6 @@ module App =
             model.Window |> tryGetColor "SystemAltMediumColor" |> Option.defaultValue Avalonia.Media.Colors.Gray
         let highlightBrush =
             model.Window |> tryGetThemeResource<Avalonia.Media.IBrush> "SystemControlHighlightAccentBrush" |> Option.defaultValue Avalonia.Media.Brushes.Blue
-
-        let icon =
-            tryGetAppIcon()
-            |> Option.map (fun stream ->
-                let bitmap = new Avalonia.Media.Imaging.Bitmap(stream)
-
-                stream.Dispose()
-
-                bitmap)
 
         let window =
             let view =

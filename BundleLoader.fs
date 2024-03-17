@@ -19,38 +19,6 @@ open SpriteGallery.Fabulous.Common
 
 type MicroOption<'a> = MicroUtils.Functional.Option<'a>
 
-type SpriteTexture (bytes : byte[], size : Avalonia.PixelSize) =
-    member val Bitmap = lazy (createBitmap bytes size)
-    member _.Bytes = bytes
-    member _.Size = size
-
-    interface System.IDisposable with
-        member this.Dispose() =
-            if this.Bitmap.IsValueCreated then
-                this.Bitmap.Value.Dispose()
-
-    override this.Finalize() = (this :> System.IDisposable).Dispose()
-    
-type Sprite =
-  { Texture : SpriteTexture
-    Rect : Avalonia.PixelRect
-    Name : string option
-    RenderDataKey : struct (System.Guid * int64) option
-    SerializedFile : string
-    Container : string
-    PathID : int64
-    BlueprintReference : (string * int64) option }
-with
-    static member Create (texture, rect) =
-      { Texture = texture
-        Rect = rect
-        Name = None
-        RenderDataKey = None
-        SerializedFile = ""
-        Container = ""
-        PathID = 0
-        BlueprintReference = None }
-
 [<RequireQualifiedAccess>]
 module Sprites =
     let get (updateProgress : (int * int) -> unit) (archives : UnityArchive[]) path =

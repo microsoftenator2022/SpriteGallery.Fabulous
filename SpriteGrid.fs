@@ -47,10 +47,10 @@ let generateLayout (sprites : Sprite seq) columns tileSize =
         }
         |> Seq.toArray
 
-    let rows =
-        if layout.Length > 0 then
-            (layout |> Array.last).RowIndex + 1
-        else 0
+    // let rows =
+    //     if layout.Length > 0 then
+    //         (layout |> Array.last).RowIndex + 1
+    //     else 0
 
     // printfn "%i rows" rows
 
@@ -124,11 +124,11 @@ let moveSelectionRight (layout : SpriteCell[]) index =
 let copySpriteToClipboard (window : ViewRef<Avalonia.Controls.Window>) sprite = async {
     match window.TryValue with
     | Some window ->
-        let source = System.Span(sprite.Texture.Bytes)
-        let stride = sprite.Texture.Bitmap.Force().PixelSize.Width * 4
+        let source = System.Span(sprite.BaseTexture.Bytes)
+        let stride = sprite.BaseTexture.Bitmap.Force().PixelSize.Width * 4
         let rect = sprite.Rect
         let dest = Array.zeroCreate<byte> (rect.Width * rect.Height * 4)
-        Texture.copyRect source stride rect (System.Span(dest))
+        copyRect source stride rect (System.Span(dest))
         
         use bitmap = createBitmap dest sprite.Rect.Size
         let ms = new System.IO.MemoryStream()
@@ -137,8 +137,6 @@ let copySpriteToClipboard (window : ViewRef<Avalonia.Controls.Window>) sprite = 
         
         let pngBytes = ms.ToArray()
 
-        printfn "%i png bytes" pngBytes.Length
-        
         let dataObject = Avalonia.Input.DataObject()
         
         dataObject.Set("image/png", pngBytes)
@@ -150,7 +148,6 @@ let copySpriteToClipboard (window : ViewRef<Avalonia.Controls.Window>) sprite = 
         return Some Unit
     | _ -> return None
 }
-    
 
 let handleKeyPress (args : KeyEventArgs) model =
     let cells = model.Layout
@@ -226,6 +223,9 @@ let update (msg : Msg) (model : Model) =
                     let spriteY1 = model.Layout[index].RowIndex * cellSize |> float
                     let spriteY2 = (model.Layout[index].RowIndex + 1) * cellSize |> float
 
+                    printfn "Scrollview offset: %f" sv.Offset.Y
+                    printfn "Sprite: %f %f" spriteY1 spriteY2
+
                     if y > spriteY1 || (y + sv.Viewport.Height) < spriteY2 then
                         ScrollToSprite index |> Cmd.ofMsg
                     else
@@ -255,13 +255,12 @@ let update (msg : Msg) (model : Model) =
 let view (model : Model) =
     let columns =
         model.Layout
-        |> Seq.where (fun cell -> cell.RowIndex = 0)
-        |> Seq.tryLast
-        |> Option.map (fun cell -> cell.ColumnIndex + 1)
-        |> Option.defaultValue 0
+        |> Seq.map (fun cell -> cell.ColumnIndex + cell.CellSpan)
+        |> Seq.append [0]
+        |> Seq.max
 
     (ScrollViewer(
-        (VStack() {
+        (Panel() {
             View.lazy'
                 (fun (columns, selectedSpriteIndex, _) ->
                     let mutable i = 0
@@ -278,9 +277,16 @@ let view (model : Model) =
 
                             let image =
                                 ViewBox(
-                                    Image(Stretch.Uniform, CroppedBitmap(sprite.Texture.Bitmap.Force(), sprite.Rect))
-                                        .renderTransform(ScaleTransform(1, -1))
-                                        .size(sprite.Rect.Width, sprite.Rect.Height))
+                                    if (tileSize < sprite.Rect.Height) then
+                                        let bitmap = sprite.GetHeightScaledBitmap(tileSize)
+
+                                        Image(bitmap, Stretch.Uniform)
+                                            .size(bitmap.Size.Width, bitmap.Size.Height)
+                                    else
+                                        Image(Stretch.Uniform, CroppedBitmap(sprite.BaseTexture.Bitmap.Force(), sprite.Rect))
+                                            .renderTransform(ScaleTransform(1, -1))
+                                            .size(sprite.Rect.Width, sprite.Rect.Height)
+                                )
                                     .stretchDirection(StretchDirection.DownOnly)
                             
                             let imageWithBorder =
@@ -288,8 +294,8 @@ let view (model : Model) =
                                     .gridColumnSpan(cellSpan)
                                     .gridColumn(column)
                                     .gridRow(row)
-                                    .onTapped(fun _ -> SpriteSelected index)
                                     .background(Colors.Transparent)
+                                    .onTapped(fun _ -> SpriteSelected index)
                                     
                             if selectedSpriteIndex = Some index then
                                 imageWithBorder
@@ -303,7 +309,6 @@ let view (model : Model) =
 
                             i <- i + 1
                     })
-                        .horizontalAlignment(HorizontalAlignment.Stretch)
                         .focusable(true)
                         .onKeyDown(fun args -> KeyPress args)
                 )
@@ -314,4 +319,5 @@ let view (model : Model) =
                     args.NewSize |> Resize
                 else Unit)
     ))
+        .bringIntoViewOnFocusChange(false)
         .reference(model.ScrollViewer)
