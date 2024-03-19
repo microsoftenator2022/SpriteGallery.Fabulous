@@ -26,11 +26,10 @@ let generateLayout (sprites : Sprite seq) columns tileSize =
             let mutable ri = 0
 
             for sprite in sprites do
-                let rect = sprite.Rect
-                let aspectRatio = (rect.Width |> float) / (rect.Height |> float)
-
+                let aspectRatio = (sprite.Rect.Width |> float) / (max tileSize sprite.Rect.Height |> float)
+                
                 let cellSpan =
-                    if rect.Width > tileSize then
+                    if sprite.Rect.Width > tileSize then
                         max 1 (min (ceil (aspectRatio - arBias) |> int) (columns - 1))
                     else 1
 
@@ -223,8 +222,8 @@ let update (msg : Msg) (model : Model) =
                     let spriteY1 = model.Layout[index].RowIndex * cellSize |> float
                     let spriteY2 = (model.Layout[index].RowIndex + 1) * cellSize |> float
 
-                    printfn "Scrollview offset: %f" sv.Offset.Y
-                    printfn "Sprite: %f %f" spriteY1 spriteY2
+                    // printfn "Scrollview offset: %f" sv.Offset.Y
+                    // printfn "Sprite: %f %f" spriteY1 spriteY2
 
                     if y > spriteY1 || (y + sv.Viewport.Height) < spriteY2 then
                         ScrollToSprite index |> Cmd.ofMsg

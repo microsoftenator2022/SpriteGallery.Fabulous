@@ -8,8 +8,6 @@ open Fabulous.Avalonia
 
 open type Fabulous.Avalonia.View
 
-
-
 let withAcrylic material content =
     ExperimentalAcrylicBorder(content)
         .material(material)
@@ -105,6 +103,8 @@ with
         let scaleTolerance = defaultArg scaleTolerance 0.0
         let fractional = defaultArg fractional false
 
+        // let height = min height this.Rect.Size.Height
+
         let isWholeNumber (x : float) =
             x - (x |> int |> float) = 0.0
 
@@ -125,13 +125,18 @@ with
         match cached with
         | Some bitmap -> bitmap
         | None ->
+            let aspectRatio = this.Rect.Size.AspectRatio
+
+            // printf "Creating %i x %i bitmap for sprite" ((height |> float) * aspectRatio |> int) height
+            // this.Name |> Option.map (sprintf " \"%s\"") |> Option.defaultValue "" |> printfn "%s"
+
             let bytes = Array.zeroCreate<byte> (this.Rect.Width * this.Rect.Height * 4)
 
             copyRect (System.Span(this.BaseTexture.Bytes)) (this.BaseTexture.Size.Width * 4) (this.Rect) (System.Span(bytes))
 
             use bitmap = createBitmap bytes (this.Rect.Size)
 
-            let width = ((bitmap.PixelSize.Width |> float) / (bitmap.PixelSize.Height |> float)) * (height |> float) |> int
+            let width = aspectRatio * (height |> float) |> int |> max 1
 
             let bitmap = bitmap.CreateScaledBitmap(Avalonia.PixelSize(width, height))
 

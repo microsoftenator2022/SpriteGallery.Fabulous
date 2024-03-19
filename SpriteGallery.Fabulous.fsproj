@@ -20,6 +20,7 @@
     <Compile Include="SpriteList.fs" />
     <Compile Include="SpriteGrid.fs" />
     <Compile Include="SpriteDetailsPanel.fs" />
+    <Compile Include="LoadProgress.fs" />
     <Compile Include="App.fs" />
   </ItemGroup>
   <ItemGroup>
@@ -28,16 +29,17 @@
   <ItemGroup>
     <None Include="Properties\**" />
   </ItemGroup>
-  <ItemGroup Condition="$(AvaloniaPlatform) == 'Desktop'">
-    <Compile Include="$(DesktopPlatformFolder)Program.fs" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.0.7" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.7" />
     <PackageReference Include="FSharp.Core" Version="8.0.*" />
     <PackageReference Include="Fabulous" Version="2.4.0" />
     <PackageReference Include="Fabulous.Avalonia" Version="2.3.0" />
+    <!-- <PackageReference Include="FSharp.Control.AsyncSeq" Version="3.2.1" /> -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+  <ItemGroup Condition="$(AvaloniaPlatform) == 'Desktop'">
+    <Compile Include="$(DesktopPlatformFolder)Program.fs" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.0.7" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\MU\MicroUtils.UnityFilesystem\MicroUtils.UnityFilesystem\MicroUtils.UnityFilesystem.csproj" />
