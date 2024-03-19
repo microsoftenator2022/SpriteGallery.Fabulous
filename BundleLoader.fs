@@ -98,6 +98,16 @@ module Sprites =
                     else None)
             |> MicroOption.op_Implicit
 
+        let mutable pptrCache : Map<int64, ITypeTreeValue> = Map.empty
+
+        let dereference (pptr : PPtr) =
+            pptrCache
+            |> Map.tryFind pptr.PathID
+            |> Option.orElseWith (fun () ->
+                pptr.TryDereference(getSerializedFile, getReader)
+                |> toOption
+                |> Option.bind (fun v -> pptrCache <- pptrCache |> Map.add pptr.PathID v; Some v))
+
         let decodeTexture (texture : Texture2D) =
             let buffer = Array.zeroCreate(4 * texture.Width * texture.Height)
             if Texture2DConverter.DecodeTexture2D(texture, System.Span(buffer), getReader) then
@@ -116,7 +126,7 @@ module Sprites =
                 printfn $"Load texture PPtr: {pptr.SerializedFilePath} -> FileID = {pptr.FileID}, PathID = {pptr.PathID}"
                 #endif
 
-                let opt : Option<ITypeTreeValue> = pptr.TryDereference(getSerializedFile, getReader)
+                let opt : Option<ITypeTreeValue> = dereference pptr
                 opt
                 |> Option.bind (
                     function
@@ -156,8 +166,7 @@ module Sprites =
                     |> MicroOption.op_Implicit
                     |> function
                     | Some ap when ap <> PPtr.NullPtr ->
-                        ap.TryDereference(getSerializedFile, getReader)
-                        |> toOption
+                        dereference ap
                         |> Option.bind (function :? Parsers.SpriteAtlas as sa -> Some sa | _ -> None)
                     | _ -> None
 
@@ -274,7 +283,7 @@ type SpriteGetter (archiveFile : string, ?includeDependencies : bool) =
 
             let rec getDeps f =
                 dependenciesMap
-                |> Map.tryFind archiveFileName
+                |> Map.tryFind f
                 |> Option.iter (fun ds ->
                     for d in ds do
                         if dependencies |> Seq.contains d |> not then
@@ -327,8 +336,6 @@ type SpriteGetter (archiveFile : string, ?includeDependencies : bool) =
         //         | None -> []
         //     else []
 
-        printfn "Mount %s" archiveFile
-
         mountArchiveWithDependencies archiveFile |> ignore
 
         let archive = mountArchive archiveFile
@@ -365,6 +372,7 @@ type SpriteGetter (archiveFile : string, ?includeDependencies : bool) =
             results
             |> Seq.collect(fun (_, sprites) -> sprites)
             |> Seq.choose id
+            |> Seq.toArray
 
         archive.Dispose()
         
@@ -431,11 +439,14 @@ module AssetLoader =
 
     let mutable private blueprintReferencedAssets : Map<(string * int64), BlueprintAssetReference> = Map.empty
 
+    let mutable private pptrCache : Map<(string * int64), ITypeTreeValue> = Map.empty
+    
     let init = UnityFileSystem.Init
 
     let cleanup() =
         containersMap <- Map.empty
         blueprintReferencedAssets <- Map.empty
+        pptrCache <- Map.empty
 
         for (_, r) in readers.Values |> Seq.collect id do
             r.Dispose()
@@ -484,7 +495,7 @@ module AssetLoader =
 
         let rec getDeps f =
             dependenciesMap
-            |> Map.tryFind archiveFileName
+            |> Map.tryFind f
             |> Option.iter (fun ds ->
                 for d in ds do
                     if dependencies |> Seq.contains d |> not then
@@ -536,7 +547,15 @@ module AssetLoader =
                 Some sf
             else None)
         |> MicroOption.op_Implicit
-    
+
+    let dereference (pptr : PPtr) =
+        pptrCache
+        |> Map.tryFind (pptr.SerializedFilePath, pptr.PathID)
+        |> Option.orElseWith (fun () ->
+            pptr.TryDereference(getSerializedFile, getReader >> MicroOption.Some)
+            |> toOption
+            |> Option.bind (fun v -> pptrCache <- pptrCache |> Map.add (pptr.SerializedFilePath, pptr.PathID) v; Some v))
+
     let getAssetBundleAsset (sf : SerializedFile) =
         let sfReader = getReader sf.Path
         
@@ -648,8 +667,9 @@ module AssetLoader =
                 printfn $"Load texture PPtr: {pptr.SerializedFilePath} -> FileID = {pptr.FileID}, PathID = {pptr.PathID}"
                 #endif
 
-                let opt : Option<ITypeTreeValue> = pptr.TryDereference(getSerializedFile, getReader >> MicroOption.Some)
-                opt
+                // let opt : Option<ITypeTreeValue> = pptr.TryDereference(getSerializedFile, getReader >> MicroOption.Some)
+                // opt
+                dereference pptr
                 |> Option.bind (
                     function
                     | :? Texture2D as texture -> 
@@ -685,8 +705,9 @@ module AssetLoader =
                 |> MicroOption.op_Implicit
                 |> function
                 | Some ap when ap <> PPtr.NullPtr ->
-                    ap.TryDereference(getSerializedFile, getReader >> MicroOption.Some)
-                    |> toOption
+                    dereference ap
+                    // ap.TryDereference(getSerializedFile, getReader >> MicroOption.Some)
+                    // |> toOption
                     |> Option.bind (function :? Parsers.SpriteAtlas as sa -> Some sa | _ -> None)
                 | _ -> None
 

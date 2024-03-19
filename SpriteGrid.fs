@@ -254,7 +254,7 @@ let update (msg : Msg) (model : Model) =
 let view (model : Model) =
     let columns =
         model.Layout
-        |> Seq.map (fun cell -> cell.ColumnIndex + cell.CellSpan)
+        |> Seq.map (fun cell -> cell.ColumnIndex + cell.CellSpan + 1)
         |> Seq.append [0]
         |> Seq.max
 
