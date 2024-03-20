@@ -67,7 +67,8 @@ type Model =
   { SpritesData : SpritesData
     ContentSize : Avalonia.Size
     SelectedSpriteIndex : int option
-    HighlightBrush : IBrush
+    WindowColors : WindowColors
+    // HighlightBrush : IBrush
     Layout : SpriteCell array
     ScrollViewer : ViewRef<Avalonia.Controls.ScrollViewer>
     Window : ViewRef<Avalonia.Controls.Window> }
@@ -79,11 +80,12 @@ with
                 this.SpritesData.Sprites[i] |> Some
             else None)
 
-let init (sprites : SpritesData) (window : ViewRef<Avalonia.Controls.Window>) =
+let init (sprites : SpritesData) (window : ViewRef<Avalonia.Controls.Window>) (colors : WindowColors) =
   { SpritesData = sprites
     ContentSize = Avalonia.Size()
     SelectedSpriteIndex = None
-    HighlightBrush = Brushes.Blue
+    // HighlightBrush = Brushes.Blue
+    WindowColors = colors
     Layout = Array.empty
     ScrollViewer = ViewRef<Avalonia.Controls.ScrollViewer>()
     Window = window }
@@ -180,9 +182,13 @@ let handleKeyPress (args : KeyEventArgs) model =
 
     | None -> Cmd.none
 
+let columnsForWidth width =
+    width / Avalonia.PixelSize(cellSize, cellSize).ToSizeWithDpi(96).Width + 1.0 |> int |> max 1
+
 let update (msg : Msg) (model : Model) =
     let getColumns model =
-        model.ContentSize.Width / Avalonia.PixelSize(cellSize, cellSize).ToSizeWithDpi(96).Width + 1.0 |> int |> max 1
+        // model.ContentSize.Width / Avalonia.PixelSize(cellSize, cellSize).ToSizeWithDpi(96).Width + 1.0 |> int |> max 1
+        columnsForWidth model.ContentSize.Width
 
     match msg with
     | Unit -> model, Cmd.none
@@ -299,7 +305,7 @@ let view (model : Model) =
                             if selectedSpriteIndex = Some index then
                                 imageWithBorder
                                     .borderThickness(4.0)
-                                    .borderBrush(model.HighlightBrush)
+                                    .borderBrush(model.WindowColors.HighlightBrushOrDefault)
                                     .margin(-2.0)
                             else
                                 imageWithBorder

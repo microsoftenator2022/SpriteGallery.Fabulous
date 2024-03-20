@@ -35,6 +35,34 @@ let tryGetThemeResource<'a> name (window : ViewRef<Window>) : 'a option =
 
 let tryGetColor name (window : ViewRef<Window>) = tryGetThemeResource<Color> name window
 
+type WindowColors = {
+    AcrylicColor : Color option
+    PanelAcrylicColor : Color option
+    HighlightBrush : IBrush option
+}
+with 
+    static member GetColors (windowRef : ViewRef<Window>) =
+        {
+            AcrylicColor =
+                windowRef |> tryGetColor "SystemAltMediumHighColor"
+
+            PanelAcrylicColor =
+                windowRef |> tryGetColor "SystemAltMediumColor"
+
+            HighlightBrush =
+                windowRef |> tryGetThemeResource<IBrush> "SystemControlHighlightAccentBrush"
+                
+        }
+    static member Defaults =
+        {|
+            AcrylicColor = Colors.DimGray
+            PanelAcrylicColor = Colors.Gray
+            HighlightBrush = Brushes.Blue
+        |}
+    member this.AcrylicColorOrDefault = this.AcrylicColor |> Option.defaultValue WindowColors.Defaults.AcrylicColor
+    member this.PanelAcrylicColorOrDefault = this.PanelAcrylicColor |> Option.defaultValue WindowColors.Defaults.PanelAcrylicColor
+    member this.HighlightBrushOrDefault = this.HighlightBrush |> Option.defaultValue WindowColors.Defaults.HighlightBrush
+
 let copyRect (textureBytes : System.Span<byte>) stride (rect : Avalonia.PixelRect) (dest : System.Span<byte>) =
     let xOffsetBytes = rect.X * 4
     let widthBytes = rect.Width * 4
@@ -48,13 +76,23 @@ let copyRect (textureBytes : System.Span<byte>) stride (rect : Avalonia.PixelRec
         source.CopyTo(destLine)
 
 let createBitmap bytes size =
-    new Avalonia.Media.Imaging.Bitmap(
-        Avalonia.Platform.PixelFormat.Bgra8888,
-        Avalonia.Platform.AlphaFormat.Unpremul,
-        System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(bytes, 0),
-        size,
-        Avalonia.Vector(96, 96),
-        size.Width * 4)
+    let handle = System.Runtime.InteropServices.GCHandle.Alloc(bytes)
+    
+    try
+        let bitmap =
+            new Avalonia.Media.Imaging.Bitmap(
+                Avalonia.Platform.PixelFormat.Bgra8888,
+                Avalonia.Platform.AlphaFormat.Unpremul,
+                System.Runtime.InteropServices.Marshal.UnsafeAddrOfPinnedArrayElement(bytes, 0),
+                // System.Runtime.InteropServices.GCHandle.ToIntPtr(handle),
+                size,
+                Avalonia.Vector(96, 96),
+                size.Width * 4)
+
+        bitmap
+
+    finally
+        handle.Free()
 
 type SpriteTexture (bytes : byte[], size : Avalonia.PixelSize) =
     member val Bitmap = lazy (createBitmap bytes size)

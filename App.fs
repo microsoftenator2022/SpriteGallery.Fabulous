@@ -14,15 +14,19 @@ open type Fabulous.Avalonia.View
 open SpriteGallery.Fabulous.Common
 open SpriteGallery.Fabulous.Views
 
+let windowRef = ViewRef<Window>()
+
 type ViewModel =
     | Empty
     | SpriteGridModel of SpriteGrid.Model
+    // | LoadProgressModel of LoadProgress.LoadBundleView.Model
+    | LoadProgressModel of LoadProgress.Model
 
 type Model =
   { Sprites : SpritesData
     ViewModel : ViewModel
-    LoadProgress : LoadProgress.Model
-    Window : ViewRef<Window> }
+    // LoadProgress : LoadProgress.Model
+    WindowColors : WindowColors }
 with
     member this.SelectedSprite =
         match this.ViewModel with
@@ -31,8 +35,10 @@ with
 
 type Msg =
 | Unit
+| LoadColors
 | UpdateSprites
 | SpriteGridMsg of SpriteGrid.Msg
+// | LoadProgressMsg of LoadProgress.Msg
 | LoadProgressMsg of LoadProgress.Msg
 
 let mutable (icon : Bitmap option) = None
@@ -54,69 +60,73 @@ let tryGetAppIcon() =
                 Some bitmap
             else None
         )
-
     icon
-
 
 let update (msg : Msg) (model : Model) =
     match msg, model.ViewModel with
+    | LoadColors, _ ->
+        { model with WindowColors = WindowColors.GetColors(windowRef) }, Cmd.none
     | SpriteGridMsg sgMsg, SpriteGridModel sgModel ->
-        let sgModel, cmd = SpriteGrid.update sgMsg sgModel
+        let sgModel, cmd = SpriteGrid.update sgMsg { sgModel with WindowColors = model.WindowColors }
 
-        { model with ViewModel = SpriteGridModel sgModel }, Cmd.map SpriteGridMsg cmd
+        { model with ViewModel = SpriteGridModel sgModel; }, Cmd.map SpriteGridMsg cmd
 
-    | LoadProgressMsg lpMsg, _ ->
-        let lpModel, cmd = LoadProgress.update lpMsg model.LoadProgress
+    // | LoadProgressMsg lpMsg, _ ->
+    //     let lpModel, cmd = LoadProgress.update lpMsg model.LoadProgress
 
-        let sprites = model.Sprites
+    //     let sprites = model.Sprites
 
-        let model =
-            { model with
-                LoadProgress = lpModel
-                Sprites = 
-                    match lpModel.Sprites with
-                    | Some spritesData -> spritesData
-                    | None -> SpritesData.init()
-            }
+    //     let model =
+    //         { model with
+    //             LoadProgress = lpModel
+    //             Sprites = 
+    //                 match lpModel.Sprites with
+    //                 | Some spritesData -> spritesData
+    //                 | None -> SpritesData.init()
+    //         }
 
-        model,
-        if sprites <> model.Sprites then
-            Cmd.batch [Cmd.map LoadProgressMsg cmd; Cmd.ofMsg UpdateSprites]
-        else Cmd.map LoadProgressMsg cmd
+    //     model,
+    //     if sprites <> model.Sprites then
+    //         Cmd.batch [Cmd.map LoadProgressMsg cmd; Cmd.ofMsg UpdateSprites]
+    //     else Cmd.map LoadProgressMsg cmd
+    | LoadProgressMsg LoadProgress.Complete, LoadProgressModel lbmodel ->
+        { model with
+            Sprites = lbmodel.SpritesData
+            ViewModel = SpriteGrid.init (SpritesData.init()) windowRef model.WindowColors |> SpriteGridModel
+        },
+        SpriteGrid.UpdateSprites lbmodel.SpritesData
+        |> SpriteGridMsg
+        |> Cmd.ofMsg
+
+    | LoadProgressMsg lpmsg, LoadProgressModel lbmodel ->
+        let lbmodel, cmd = LoadProgress.update lpmsg lbmodel
+        { model with ViewModel = LoadProgressModel lbmodel }, Cmd.map LoadProgressMsg cmd
 
     | UpdateSprites, viewModel ->
         match viewModel with
-        | Empty -> model, Cmd.none
         | SpriteGridModel _ ->
             model, Cmd.map SpriteGridMsg (model.Sprites |> SpriteGrid.UpdateSprites |> Cmd.ofMsg)
-
-    | Unit, _ -> model, Cmd.none
+        | _ -> model, Cmd.none
     | _, Empty -> model, Cmd.none
+    | _ -> model, Cmd.none
 
 let app (model : Model) =
-    let acrylicColor =
-        model.Window |> tryGetColor "SystemAltMediumHighColor" |> Option.defaultValue Avalonia.Media.Colors.DimGray
-    let panelAcrylicColor =
-        model.Window |> tryGetColor "SystemAltMediumColor" |> Option.defaultValue Avalonia.Media.Colors.Gray
-    let highlightBrush =
-        model.Window |> tryGetThemeResource<Avalonia.Media.IBrush> "SystemControlHighlightAccentBrush" |> Option.defaultValue Avalonia.Media.Brushes.Blue
-
     let window =
         let view =
             (Panel() {
-                let loadProgress = 
-                    View.map LoadProgressMsg (LoadProgress.view model.LoadProgress)
+                // let loadProgress = 
+                //     View.map LoadProgressMsg (LoadProgress.view model.LoadProgress)
 
                 let content =
                     (Dock(true) {
-                        loadProgress
-                            .dock(Dock.Bottom)
+                        // loadProgress
+                        //     .dock(Dock.Bottom)
 
                         match model.ViewModel with
                         | SpriteGridModel sgm ->
-                            let sgm = { sgm with HighlightBrush = highlightBrush }
-
                             View.map SpriteGridMsg (SpriteGrid.view sgm)
+                        | LoadProgressModel lpModel ->
+                            View.map LoadProgressMsg (LoadProgress.view lpModel)
                         | Empty -> ()
                     })
                         .margin(4)
@@ -124,7 +134,7 @@ let app (model : Model) =
                 let details =
                     (View.map (fun _ -> Unit) (SpriteDetailsPanel.view model.SelectedSprite))
                         .margin(4)
-                    |> withAcrylic (acrylicMaterial panelAcrylicColor)
+                    |> withAcrylic (acrylicMaterial (model.WindowColors.PanelAcrylicColorOrDefault))
                 
                 SplitView(details, content)
                     .displayMode(SplitViewDisplayMode.Inline)
@@ -134,12 +144,13 @@ let app (model : Model) =
                     .paneBackground(Avalonia.Media.Colors.Transparent)
 
             })
-            |> withAcrylic (acrylicMaterial acrylicColor)
+            |> withAcrylic (acrylicMaterial (model.WindowColors.AcrylicColorOrDefault))
 
         Window(view)
-            .reference(model.Window)
+            .reference(windowRef)
             .transparencyLevelHint([WindowTransparencyLevel.AcrylicBlur])
             .background(Avalonia.Media.Colors.Transparent)
+            .onOpened(LoadColors)
 
     let window =
         match tryGetAppIcon() with
@@ -151,17 +162,17 @@ let app (model : Model) =
 
 let init () =
     let spritesData = SpritesData.init()
-    let windowRef = ViewRef<Window>()
-    
+    let colors = WindowColors.GetColors windowRef
+
     let model =
         {
             Sprites = spritesData
-            ViewModel = SpriteGrid.init spritesData windowRef |> SpriteGridModel
-            LoadProgress = LoadProgress.init windowRef
-            Window = windowRef
+            // ViewModel = SpriteGrid.init spritesData windowRef colors |> SpriteGridModel
+            ViewModel = LoadProgress.init windowRef |> LoadProgressModel
+            // LoadProgress = LoadProgress.init windowRef
+            WindowColors = colors
         }
     
     model, Cmd.none
-
 let theme = FluentTheme()
 let program = Program.statefulWithCmd init update app
