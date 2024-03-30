@@ -71,7 +71,7 @@ let getDependenciesAsync dependencylistJson = async {
         |> Map.ofSeq
 
     if Map.isEmpty dependencies then
-        printfn $"Could not load dependency data from {dependencylistJson}"
+        eprintfn $"Could not load dependency data from {dependencylistJson}"
         
     return dependencies
 }

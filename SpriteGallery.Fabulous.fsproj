@@ -30,8 +30,8 @@
     <None Include="Properties\**" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.7" />
     <PackageReference Include="FSharp.Core" Version="8.0.*" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.0.7" />
     <PackageReference Include="Fabulous" Version="2.4.0" />
     <PackageReference Include="Fabulous.Avalonia" Version="2.3.0" />
     <!-- <PackageReference Include="FSharp.Control.AsyncSeq" Version="3.2.1" /> -->

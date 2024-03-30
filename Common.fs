@@ -8,6 +8,8 @@ open Fabulous.Avalonia
 
 open type Fabulous.Avalonia.View
 
+let tileSize = 64
+
 let withAcrylic material content =
     ExperimentalAcrylicBorder(content)
         .material(material)

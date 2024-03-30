@@ -13,93 +13,6 @@ open type Fabulous.Avalonia.View
 open SpriteGallery.Fabulous
 open SpriteGallery.Fabulous.Common
 
-// type Model =
-//   { Complete : bool
-//     Current : int
-//     Max : int
-//     Window : ViewRef<Window>
-//     Sprites : SpritesData option }
-
-// let init windowRef =
-//   { Complete = false
-//     Current = 0
-//     Max = 1
-//     Window = windowRef
-//     Sprites = None }
-
-// type Msg =
-// | Unit
-// | OpenFile
-// | LoadProgress of SpriteGetter
-// | UpdateSprites of SpritesData
-
-// let update msg model =
-//     match msg with
-//     | Unit -> model, Cmd.none
-//     | OpenFile ->
-//         model.Window.TryValue
-//         |> function
-//         | None ->
-//             eprintfn "no windowref"
-//             model, Cmd.none
-//         | Some window ->
-//             model,
-//             Cmd.ofAsyncMsgOption (async {
-//                 let fpo = Storage.FilePickerOpenOptions()
-//                 fpo.AllowMultiple <- false
-
-//                 let! files =
-//                     window.StorageProvider.OpenFilePickerAsync(fpo)
-//                     |> Async.AwaitTask
-
-//                 let filePath =
-//                     files
-//                     |> Seq.tryHead
-//                     |> Option.map (fun f -> f.Path.LocalPath)
-
-//                 match filePath with
-//                 | Some path ->
-//                     let task, sg = SpritesData.loadFromAsync path
-//                     task |> Async.Ignore |> Async.Start
-                    
-//                     return Some (LoadProgress sg)
-//                 | None -> return None
-//             })
-
-//     | LoadProgress getter ->
-//         let (current, max) = getter.Progress
-
-//         let model = { model with Sprites = None; Complete = getter.Complete; Current = current; Max = max; }
-
-//         if getter.Complete then
-//             printfn "Done"
-//             let sprites = SpritesData.getResult getter
-
-//             (getter :> System.IDisposable).Dispose()
-
-//             model, Cmd.ofMsg(UpdateSprites sprites)
-//         else
-//             model, Cmd.ofAsyncMsg (async {
-//                 let! _ = 
-//                     Async.AwaitEvent getter.Update
-
-//                 return (LoadProgress getter)
-//             })
-
-//     | UpdateSprites spritesData ->
-//         { model with Sprites = Some spritesData }, Cmd.none
-
-// let view (model : Model) =
-//     (VStack() {
-//         ProgressBar(0, model.Max, model.Current, fun _ -> Unit)
-//             .horizontalAlignment(HorizontalAlignment.Stretch)
-
-//         Button("Open...", OpenFile)
-//             .margin(0, 2, 2, 0)
-//             .horizontalAlignment(HorizontalAlignment.Left)
-//     })
-
-// module LoadBundleView =
 open System.Threading
 open MicroUtils.Interop
 
@@ -186,7 +99,7 @@ type LoadProgress = { Max : int; Current : int; SpritesData : SpritesData }
 type State =
 | SelectBundle
 | LoadSprites of LoadProgress * LoadContext
-| GenerateThumbnail of LoadProgress
+| GenerateThumbnails of LoadProgress
 
 type Model =
   { LoadDependencies : bool
@@ -241,19 +154,39 @@ let loadStep = function
         StatusMessage "Generating thumbnails"
         |> Cmd.ofMsg
 
-        GenerateThumbnail { progress with Current = 0 }
+        GenerateThumbnails { progress with Current = 0 }
         |> ProgressUpdate
         |> Cmd.ofMsg
     ] |> Cmd.batch
 
-| GenerateThumbnail progress ->
+| GenerateThumbnails progress ->
     if progress.Current < progress.Max then
-        Tasks.Task.Run(fun () ->
-            let _ = progress.SpritesData.Sprites[progress.Current].GetHeightScaledBitmap(SpriteGrid.tileSize)
+        async {
+            let tasks = seq {
+                for i in 0..(System.Environment.ProcessorCount - 1) do
+                // for i in 0..0 do
+                    let i = progress.Current + i
+
+                    if i < progress.Max then
+                        let task =
+                            System.Threading.Tasks.Task.Run(fun () ->
+                                progress.SpritesData.Sprites[i].GetHeightScaledBitmap(tileSize) |> ignore
+                                i)
+                            |> Async.AwaitTask
+
+                        yield task
+            }
+
+            let! results = tasks |> Async.Parallel
+
+            return GenerateThumbnails { progress with Current = (results |> Seq.max) + 1 } |> ProgressUpdate
+        }
+        // Tasks.Task.Run(fun () ->
+        //     let _ = progress.SpritesData.Sprites[progress.Current].GetHeightScaledBitmap(SpriteGrid.tileSize)
             
-            GenerateThumbnail { progress with Current = progress.Current + 1 }
-            |> ProgressUpdate)
-        |> Async.AwaitTask
+        //     GenerateThumbnail { progress with Current = progress.Current + 1 }
+        //     |> ProgressUpdate)
+        // |> Async.AwaitTask
         |> Cmd.ofAsyncMsg
     else
         [
@@ -331,17 +264,19 @@ let update msg model =
                     match update with
                     | SelectBundle -> model.SpritesData
                     | LoadSprites (progress, _) -> progress.SpritesData
-                    | GenerateThumbnail progress -> progress.SpritesData }
+                    | GenerateThumbnails progress -> progress.SpritesData }
 
         model, loadStep update
-    | _ -> model, Cmd.none
+    | _ ->
+        eprintfn "WARNING: Unhandled LoadProgress message %A" msg
+        model, Cmd.none
 
 let view model =
     let (progress, total) =
         match model.State with
         | SelectBundle -> (0.0, 1.0)
         | LoadSprites (progress, _) -> (progress.Current, progress.Max * 2 |> float)
-        | GenerateThumbnail progress -> (progress.Max + progress.Current |> float, progress.Max * 2 |> float)
+        | GenerateThumbnails progress -> (progress.Max + progress.Current |> float, progress.Max * 2 |> float)
 
     // let statusMessage =
     //     match model.State with

@@ -16,21 +16,22 @@ open SpriteGallery.Fabulous.Views
 
 let windowRef = ViewRef<Window>()
 
-type ViewModel =
-    | Empty
-    | SpriteGridModel of SpriteGrid.Model
-    // | LoadProgressModel of LoadProgress.LoadBundleView.Model
-    | LoadProgressModel of LoadProgress.Model
+type AppView =
+| SpriteGridView
+| LoadProgressView
+| SpriteListView
 
 type Model =
   { Sprites : SpritesData
-    ViewModel : ViewModel
-    // LoadProgress : LoadProgress.Model
+    CurrentView : AppView
+    SpriteGrid : SpriteGrid.Model
+    SpriteList : SpriteList.Model
+    LoadProgress : LoadProgress.Model
     WindowColors : WindowColors }
 with
     member this.SelectedSprite =
-        match this.ViewModel with
-        | SpriteGridModel sgModel -> sgModel.SelectedSprite
+        match this.CurrentView with
+        | SpriteGridView -> this.SpriteGrid.SelectedSprite
         | _ -> None
 
 type Msg =
@@ -38,8 +39,8 @@ type Msg =
 | LoadColors
 | UpdateSprites
 | SpriteGridMsg of SpriteGrid.Msg
-// | LoadProgressMsg of LoadProgress.Msg
 | LoadProgressMsg of LoadProgress.Msg
+| SpriteListMsg of SpriteList.Msg
 
 let mutable (icon : Bitmap option) = None
 
@@ -63,88 +64,80 @@ let tryGetAppIcon() =
     icon
 
 let update (msg : Msg) (model : Model) =
-    match msg, model.ViewModel with
-    | LoadColors, _ ->
-        { model with WindowColors = WindowColors.GetColors(windowRef) }, Cmd.none
-    | SpriteGridMsg sgMsg, SpriteGridModel sgModel ->
-        let sgModel, cmd = SpriteGrid.update sgMsg { sgModel with WindowColors = model.WindowColors }
+    match msg, model.CurrentView with
+    | LoadColors, _ -> { model with WindowColors = WindowColors.GetColors(windowRef) }, Cmd.none
 
-        { model with ViewModel = SpriteGridModel sgModel; }, Cmd.map SpriteGridMsg cmd
+    | SpriteGridMsg sgMsg, SpriteGridView ->
+        let sgModel, cmd = SpriteGrid.update sgMsg { model.SpriteGrid with WindowColors = model.WindowColors }
 
-    // | LoadProgressMsg lpMsg, _ ->
-    //     let lpModel, cmd = LoadProgress.update lpMsg model.LoadProgress
+        { model with SpriteGrid = sgModel }, Cmd.map SpriteGridMsg cmd
+    | SpriteListMsg slMsg, SpriteListView ->
+        let slModel, cmd = SpriteList.update slMsg { model.SpriteList with WindowColors = model.WindowColors }
 
-    //     let sprites = model.Sprites
+        { model with SpriteList = slModel }, Cmd.map SpriteListMsg cmd
 
-    //     let model =
-    //         { model with
-    //             LoadProgress = lpModel
-    //             Sprites = 
-    //                 match lpModel.Sprites with
-    //                 | Some spritesData -> spritesData
-    //                 | None -> SpritesData.init()
-    //         }
+    | LoadProgressMsg LoadProgress.Complete, LoadProgressView ->
+        let model =
+            { model with
+                Sprites = model.LoadProgress.SpritesData
+                CurrentView = SpriteListView
+            }
 
-    //     model,
-    //     if sprites <> model.Sprites then
-    //         Cmd.batch [Cmd.map LoadProgressMsg cmd; Cmd.ofMsg UpdateSprites]
-    //     else Cmd.map LoadProgressMsg cmd
-    | LoadProgressMsg LoadProgress.Complete, LoadProgressModel lbmodel ->
-        { model with
-            Sprites = lbmodel.SpritesData
-            ViewModel = SpriteGrid.init (SpritesData.init()) windowRef model.WindowColors |> SpriteGridModel
-        },
-        SpriteGrid.UpdateSprites lbmodel.SpritesData
-        |> SpriteGridMsg
+        model,
+        SpriteList.UpdateSprites model.Sprites
+        |> SpriteListMsg
         |> Cmd.ofMsg
 
-    | LoadProgressMsg lpmsg, LoadProgressModel lbmodel ->
-        let lbmodel, cmd = LoadProgress.update lpmsg lbmodel
-        { model with ViewModel = LoadProgressModel lbmodel }, Cmd.map LoadProgressMsg cmd
+        // SpriteGrid.UpdateSprites model.Sprites
+        // |> SpriteGridMsg
+        // |> Cmd.ofMsg
 
-    | UpdateSprites, viewModel ->
-        match viewModel with
-        | SpriteGridModel _ ->
-            model, Cmd.map SpriteGridMsg (model.Sprites |> SpriteGrid.UpdateSprites |> Cmd.ofMsg)
-        | _ -> model, Cmd.none
-    | _, Empty -> model, Cmd.none
-    | _ -> model, Cmd.none
+    | LoadProgressMsg lpmsg, LoadProgressView ->
+        let lbmodel, cmd = LoadProgress.update lpmsg model.LoadProgress
+        { model with LoadProgress = lbmodel }, Cmd.map LoadProgressMsg cmd
+
+    | UpdateSprites, SpriteGridView -> model, Cmd.map SpriteGridMsg (model.Sprites |> SpriteGrid.UpdateSprites |> Cmd.ofMsg)
+    | _ ->
+        eprintfn "WARNING: Unhandled window message %A" msg
+        model, Cmd.none
 
 let app (model : Model) =
     let window =
         let view =
-            (Panel() {
-                // let loadProgress = 
-                //     View.map LoadProgressMsg (LoadProgress.view model.LoadProgress)
-
-                let content =
-                    (Dock(true) {
-                        // loadProgress
-                        //     .dock(Dock.Bottom)
-
-                        match model.ViewModel with
-                        | SpriteGridModel sgm ->
-                            View.map SpriteGridMsg (SpriteGrid.view sgm)
-                        | LoadProgressModel lpModel ->
-                            View.map LoadProgressMsg (LoadProgress.view lpModel)
-                        | Empty -> ()
-                    })
-                        .margin(4)
-
+            (Dock(true) {
                 let details =
                     (View.map (fun _ -> Unit) (SpriteDetailsPanel.view model.SelectedSprite))
+                        .margin(12)
+                        .style(withAcrylic (acrylicMaterial (model.WindowColors.PanelAcrylicColorOrDefault)))
+
+                let spriteGrid sgm =
+                    (View.map SpriteGridMsg (SpriteGrid.view sgm))
                         .margin(4)
-                    |> withAcrylic (acrylicMaterial (model.WindowColors.PanelAcrylicColorOrDefault))
-                
-                SplitView(details, content)
-                    .displayMode(SplitViewDisplayMode.Inline)
-                    .isPaneOpen(true)
-                    .panePlacement(SplitViewPanePlacement.Right)
-                    .openPaneLength(450)
-                    .paneBackground(Avalonia.Media.Colors.Transparent)
+
+                let spriteList slm =
+                    (View.map SpriteListMsg (SpriteList.view slm))
+
+                let loadProgress lpm =
+                    View.map LoadProgressMsg (LoadProgress.view lpm)
+
+                let spriteView content =
+                    SplitView(details, content)
+                        .displayMode(SplitViewDisplayMode.Inline)
+                        .isPaneOpen(true)
+                        .panePlacement(SplitViewPanePlacement.Right)
+                        .openPaneLength(450)
+                        .paneBackground(Avalonia.Media.Colors.Transparent)
+
+                match model.CurrentView with
+                | LoadProgressView ->
+                    loadProgress model.LoadProgress
+                | SpriteGridView ->
+                    model.SpriteGrid |> spriteGrid |> spriteView
+                | SpriteListView ->
+                    model.SpriteList |> spriteList |> spriteView
 
             })
-            |> withAcrylic (acrylicMaterial (model.WindowColors.AcrylicColorOrDefault))
+                .style(withAcrylic (acrylicMaterial (model.WindowColors.AcrylicColorOrDefault)))
 
         Window(view)
             .reference(windowRef)
@@ -164,13 +157,18 @@ let init () =
     let spritesData = SpritesData.init()
     let colors = WindowColors.GetColors windowRef
 
+    let spriteGrid = SpriteGrid.init (SpritesData.init()) windowRef colors
+    let spriteList = SpriteList.init (SpritesData.init()) colors
+    let loadProgress = LoadProgress.init windowRef
+
     let model =
         {
             Sprites = spritesData
-            // ViewModel = SpriteGrid.init spritesData windowRef colors |> SpriteGridModel
-            ViewModel = LoadProgress.init windowRef |> LoadProgressModel
-            // LoadProgress = LoadProgress.init windowRef
             WindowColors = colors
+            LoadProgress = loadProgress
+            SpriteGrid = spriteGrid
+            SpriteList = spriteList
+            CurrentView = LoadProgressView
         }
     
     model, Cmd.none

@@ -68,7 +68,6 @@ type Model =
     ContentSize : Avalonia.Size
     SelectedSpriteIndex : int option
     WindowColors : WindowColors
-    // HighlightBrush : IBrush
     Layout : SpriteCell array
     ScrollViewer : ViewRef<Avalonia.Controls.ScrollViewer>
     Window : ViewRef<Avalonia.Controls.Window> }
@@ -90,7 +89,7 @@ let init (sprites : SpritesData) (window : ViewRef<Avalonia.Controls.Window>) (c
     ScrollViewer = ViewRef<Avalonia.Controls.ScrollViewer>()
     Window = window }
 
-let tileSize = 64
+// let tileSize = 64
 let padding = 2
 let cellSize = tileSize + (padding * 2)
 
@@ -192,8 +191,7 @@ let update (msg : Msg) (model : Model) =
 
     match msg with
     | Unit -> model, Cmd.none
-    | KeyPress kea ->
-        model, handleKeyPress kea model
+    | KeyPress kea -> model, handleKeyPress kea model
     | UpdateSprites spritesData ->
         let model = 
             { model with
@@ -208,7 +206,7 @@ let update (msg : Msg) (model : Model) =
 
     | Resize size -> { model with ContentSize = size }, UpdateSprites model.SpritesData |> Cmd.ofMsg
     | SpriteSelected index ->
-        let model = 
+        let model =
             { model with
                 SelectedSpriteIndex =
                     if model.SelectedSpriteIndex <> Some index then
