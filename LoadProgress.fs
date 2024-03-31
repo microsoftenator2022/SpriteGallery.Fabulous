@@ -286,6 +286,13 @@ let view model =
 
     (Grid(coldefs = [Star; Stars 6; Star], rowdefs = [Star; Stars 6; Star]) {
         (VStack() {
+            match tryGetSuspectingIcon() with
+            | Some icon ->
+                Image(icon)
+                    .size(icon.Size.Width, icon.Size.Height)
+                    .margin(4)
+            | None -> ()
+
             (Grid(coldefs = [Star; Auto], rowdefs = [Auto]) {
                 TextBox(model.FilePath, fun text -> UpdatePath text)
                     .isEnabled(model.State = SelectBundle)
@@ -307,7 +314,7 @@ let view model =
                 .isEnabled(model.State = SelectBundle)
 
             Button("Open", Start)
-                .isEnabled(model.State = SelectBundle)
+                .isEnabled(model.State = SelectBundle && model.FilePath <> "")
 
             ProgressBar(0, total, progress, fun _ -> Unit)
                 .horizontalAlignment(HorizontalAlignment.Stretch)

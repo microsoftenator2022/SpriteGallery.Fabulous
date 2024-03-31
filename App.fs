@@ -42,27 +42,6 @@ type Msg =
 | LoadProgressMsg of LoadProgress.Msg
 | SpriteListMsg of SpriteList.Msg
 
-let mutable (icon : Bitmap option) = None
-
-let tryGetAppIcon() =
-    icon <-
-        icon
-        |> Option.orElseWith (fun () ->
-            let resourceName = "SpriteGallery.Fabulous.owlcat_suspecting_framed.png"
-
-            let ass = System.Reflection.Assembly.GetExecutingAssembly()
-            
-            if ass.GetManifestResourceNames() |> Seq.contains resourceName then
-                let stream = ass.GetManifestResourceStream(resourceName)
-                let bitmap = new Avalonia.Media.Imaging.Bitmap(stream)
-
-                stream.Dispose()
-
-                Some bitmap
-            else None
-        )
-    icon
-
 let update (msg : Msg) (model : Model) =
     match msg, model.CurrentView with
     | LoadColors, _ -> { model with WindowColors = WindowColors.GetColors(windowRef) }, Cmd.none
@@ -71,6 +50,7 @@ let update (msg : Msg) (model : Model) =
         let sgModel, cmd = SpriteGrid.update sgMsg { model.SpriteGrid with WindowColors = model.WindowColors }
 
         { model with SpriteGrid = sgModel }, Cmd.map SpriteGridMsg cmd
+
     | SpriteListMsg slMsg, SpriteListView ->
         let slModel, cmd = SpriteList.update slMsg { model.SpriteList with WindowColors = model.WindowColors }
 
@@ -84,6 +64,7 @@ let update (msg : Msg) (model : Model) =
             }
 
         model,
+
         SpriteList.UpdateSprites model.Sprites
         |> SpriteListMsg
         |> Cmd.ofMsg

@@ -183,3 +183,30 @@ with
             this.ScaledBitmapCache <- this.ScaledBitmapCache |> Array.appendOne bitmap
             
             bitmap
+
+
+let tryGetIcon filename =
+    let resourceName = $"SpriteGallery.Fabulous.{filename}"
+
+    let ass = System.Reflection.Assembly.GetExecutingAssembly()
+    
+    if ass.GetManifestResourceNames() |> Seq.contains resourceName then
+        let stream = ass.GetManifestResourceStream(resourceName)
+        let bitmap = new Avalonia.Media.Imaging.Bitmap(stream)
+
+        stream.Dispose()
+
+        Some bitmap
+    else None
+
+let mutable appIcon = None
+
+let tryGetAppIcon() =
+    appIcon
+    |> Option.orElseWith (fun () -> tryGetIcon "owlcat_suspecting_framed.png")
+
+let mutable owlcat_suspecting_icon = None
+
+let tryGetSuspectingIcon() =
+    owlcat_suspecting_icon
+    |> Option.orElseWith (fun () -> tryGetIcon "owlcat_suspecting.png")

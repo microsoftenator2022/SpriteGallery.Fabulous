@@ -1,6 +1,8 @@
 [<RequireQualifiedAccess>]
 module SpriteGallery.Fabulous.Views.SpriteList
 
+open DotNet.Globbing
+
 open Avalonia.Input
 open Avalonia.Layout
 open Avalonia.Media
@@ -13,27 +15,50 @@ open type Fabulous.Avalonia.View
 open SpriteGallery.Fabulous
 open SpriteGallery.Fabulous.Common
 
+type FilterType =
+| Name
+| Container
+| ReferenceAssetId
+| ReferenceFileId
+
 type Model = 
   { SpritesData : SpritesData
     SelectedSpriteIndex : int
     WindowColors : WindowColors
     HeaderColDefs : Dimension seq
-    UpdateHeader : bool }
+    UpdateHeader : bool
+    FilterString : string
+    FilteredSprites : (int * Sprite) seq
+    FilterType : FilterType }
 
 let init spritesData windowColors =
   { SpritesData = spritesData
     SelectedSpriteIndex = -1
     WindowColors = windowColors
     HeaderColDefs = [Pixel tileSize; Star; Star; Stars 2]
-    UpdateHeader = false }
+    UpdateHeader = false
+    FilterString = ""
+    FilteredSprites = Seq.empty
+    FilterType = Name }
 
 type Msg =
 | Unit
 | UpdateSprites of SpritesData
-| SpriteSelected of int
-| ScrollToSprite of int
-| KeyPress of KeyEventArgs
+// | SpriteSelected of int
+// | ScrollToSprite of int
+// | KeyPress of KeyEventArgs
+| UpdateFilter
+| FilterTextChanged of string
+| FilterTypeChanged of FilterType
 | LayoutUpdated
+
+let matchSprite (glob : Glob) (filterType : FilterType) (sprite : Sprite) =
+    match filterType, sprite.Name, sprite.Container, sprite.BlueprintReference with
+    | Name, Some name, _, _ when glob.IsMatch(name) -> true
+    | Container, _, container, _ when glob.IsMatch(container) -> true
+    | ReferenceAssetId, _, _, Some (assetId, _) when glob.IsMatch(assetId) -> true
+    | ReferenceAssetId, _, _, Some (_, fileId) when glob.IsMatch(fileId.ToString()) -> true
+    | _ -> false
 
 let margin = 4
 
@@ -66,7 +91,10 @@ let getHeaderColDefs() =
 let update msg model =
     match msg with
     | Unit -> model, Cmd.none
-    | UpdateSprites sprites -> { model with SpritesData = sprites; SelectedSpriteIndex = -1; UpdateHeader = true }, Cmd.none
+    | UpdateSprites sprites ->
+        { model with SpritesData = sprites; SelectedSpriteIndex = -1; UpdateHeader = true },
+        Cmd.ofMsg UpdateFilter
+
     | LayoutUpdated ->
         let model =
             if model.UpdateHeader then
@@ -74,11 +102,40 @@ let update msg model =
                 | Some coldefs -> { model with HeaderColDefs = coldefs; UpdateHeader = false }
                 | None -> model
             else model
+
+        model, Cmd.none
+
+    | UpdateFilter ->
+        let sprites =
+            model.SpritesData.Sprites
+            |> Seq.mapi (fun i s -> (i, s))
+
+        let glob =
+            if model.FilterString = "" then None
+            else
+                let go = GlobOptions.Default
+                go.Evaluation.CaseInsensitive <- true
                 
-        model, Cmd.none
-    | _ ->
-        eprintfn "WARNING: Unhandled SpriteList message %A" msg
-        model, Cmd.none
+                Glob.Parse($"*{model.FilterString}*", go) |> Some
+
+        let sprites =
+            match glob with
+            | Some glob -> sprites |> Seq.where (snd >> matchSprite glob model.FilterType)
+            | None -> sprites
+
+        { model with FilteredSprites = sprites; UpdateHeader = true }, Cmd.ofMsg LayoutUpdated
+    
+    | FilterTypeChanged ft ->
+        { model with FilterType = ft }, Cmd.ofMsg UpdateFilter
+
+    | FilterTextChanged s ->
+        let model = { model with FilterString = s }
+
+        model, Cmd.ofMsg UpdateFilter
+
+    // | _ ->
+    //     eprintfn "WARNING: Unhandled SpriteList message %A" msg
+    //     model, Cmd.none
 
 let view (model : Model) =
     (Dock(true) {
@@ -88,11 +145,30 @@ let view (model : Model) =
                     .margin(margin)
                     .verticalAlignment(VerticalAlignment.Center)
                 
-                TextBox("", fun _ -> Unit)
+                TextBox(model.FilterString, FilterTextChanged)
                     .width(200)
                     .margin(margin)
                     .verticalAlignment(VerticalAlignment.Center)
 
+                RadioButton("Name", model.FilterType = Name, fun isChecked -> if isChecked then FilterTypeChanged Name else Unit )
+                    .groupName("FilterType")
+                    .margin(margin)
+                    .verticalAlignment(VerticalAlignment.Center)
+
+                RadioButton("Container", model.FilterType = Container, fun isChecked -> if isChecked then FilterTypeChanged Container else Unit )
+                    .groupName("FilterType")
+                    .margin(margin)
+                    .verticalAlignment(VerticalAlignment.Center)
+
+                RadioButton("AssetId", model.FilterType = ReferenceAssetId, fun isChecked -> if isChecked then FilterTypeChanged ReferenceAssetId else Unit )
+                    .groupName("FilterType")
+                    .margin(margin)
+                    .verticalAlignment(VerticalAlignment.Center)
+
+                RadioButton("FileId", model.FilterType = ReferenceFileId, fun isChecked -> if isChecked then FilterTypeChanged ReferenceFileId else Unit )
+                    .groupName("FilterType")
+                    .margin(margin)
+                    .verticalAlignment(VerticalAlignment.Center)
             })
                 .horizontalAlignment(HorizontalAlignment.Left)
 
@@ -124,41 +200,40 @@ let view (model : Model) =
 
         ScrollViewer(
             let rowdefs =
-                Array.create model.SpritesData.Sprites.Length (Pixel tileSize)
-
+                Array.create (model.FilteredSprites |> Seq.length) (Pixel tileSize)
             (Grid(coldefs = [Pixel tileSize; Auto; Auto; Auto; Auto], rowdefs = rowdefs) {
-                for (index, sprite) in (model.SpritesData.Sprites |> Seq.mapi (fun i sprite -> i, sprite)) do
+                for (row, (index, sprite)) in (model.FilteredSprites |> Seq.mapi (fun i s -> i, s)) do
                     let bitmap = sprite.GetHeightScaledBitmap(tileSize)
                     ViewBox(
                         Image(bitmap, Stretch.Uniform)
                             .size(bitmap.Size.Width, bitmap.Size.Height)
                     )
-                        .gridRow(index)
+                        .gridRow(row)
                         .gridColumn(0)
                         .stretchDirection(StretchDirection.DownOnly)
 
                     TextBlock(sprite.Name |> Option.defaultValue "")
                         .margin(margin)
                         .centerVertical()
-                        .gridRow(index)
+                        .gridRow(row)
                         .gridColumn(1)
                         
                     TextBlock(sprite.Container)
                         .margin(margin)
                         .centerVertical()
-                        .gridRow(index)
+                        .gridRow(row)
                         .gridColumn(2)
 
                     TextBlock(sprite.BlueprintReference |> Option.map fst |> Option.defaultValue "")
                         .margin(margin)
                         .centerVertical()
-                        .gridRow(index)
+                        .gridRow(row)
                         .gridColumn(3)
 
                     TextBlock(sprite.BlueprintReference |> Option.map snd |> Option.map (sprintf "%i") |> Option.defaultValue "")
                         .margin(margin)
                         .centerVertical()
-                        .gridRow(index)
+                        .gridRow(row)
                         .gridColumn(4)
             })
                 .showGridLines(model.SpritesData.Sprites.Length > 0)
